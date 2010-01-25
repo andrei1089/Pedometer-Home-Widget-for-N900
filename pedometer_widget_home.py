@@ -14,6 +14,8 @@ COUNTER=PATH+"/counter"
 TIMER=PATH+"/timer"
 MODE=PATH+"/mode"
 HEIGHT=PATH+"/height"
+UNIT=PATH+"/unit"
+ASPECT=PATH+"/aspect"
 
 class PedometerHomePlugin(hildondesktop.HomePluginItem):
     button = None
@@ -31,9 +33,11 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
     totalTime = 0
     mode = 0
     height = 0
+    unit = 0
 
     counter = 0
     time = 0
+    aspect = 0
 
     def __init__(self):
 
@@ -46,11 +50,15 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             self.totalTime = self.client.get_int(TIMER)
             self.mode = self.client.get_int(MODE)
             self.height = self.client.get_int(HEIGHT)
+            self.unit = self.client.get_int(UNIT)
+            self.aspect = self.client.get_int(ASPECT)
         except:
             self.client.set_int(COUNTER, 0)
             self.client.set_int(TIMER, 0)
             self.client.set_int(MODE, 0)
             self.client.set_int(HEIGHT, 0)
+            self.client.set_int(UNIT, 0)
+            self.client.set_int(ASPECT, 0)
 
         self.pedometer = PedoCounter(self.update_values)
         self.pedometer.set_mode(self.mode)
@@ -80,6 +88,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         currentVBox.add(self.labelsC["count"])
         currentVBox.add(self.labelsC["dist"])
         currentVBox.add(self.labelsC["avgSpeed"])
+        self.currentBox = currentVBox
 
         totalVBox = gtk.VBox(spacing=1)
         totalVBox.add(gtk.Label("Total"))
@@ -87,6 +96,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         totalVBox.add(self.labelsT["count"])
         totalVBox.add(self.labelsT["dist"])
         totalVBox.add(self.labelsT["avgSpeed"])
+        self.totalBox = totalVBox
 
         mainHBox.add(self.button)
         mainHBox.add(descVBox)
@@ -95,6 +105,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         mainHBox.show_all()
         self.add(mainHBox)
+        self.update_aspect()
 
         self.connect("unrealize", self.close_requested)
         self.set_settings(True)
@@ -106,20 +117,46 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         labels["dist"] = gtk.Label()
         labels["avgSpeed"] = gtk.Label()
 
+    def update_aspect(self):
+        if self.aspect == 0:
+            self.currentBox.show_all()
+            self.totalBox.show_all()
+        elif self.aspect == 1:
+            self.currentBox.show_all()
+            self.totalBox.hide_all()
+        else:
+            self.currentBox.hide_all()
+            self.totalBox.show_all()
+
     def update_ui_values(self, labels, timer, steps):
         def get_str_distance(meters):
             if meters > 1000:
-                return str(meters/1000) + " km"
+                if self.unit == 0:
+                    return str(meters/1000) + " km"
+                else:
+                    return str(meters/1609.344) + " mi"
             else:
-                return str(meters) + " m"
+                if self.unit == 0:
+                    return str(meters) + " m"
+                else:
+                    return str(meters*3.2808) + " ft"
 
         def get_avg_speed(timer, dist):
+            suffix = ""
+            conv = 0
+            if self.unit:
+                suffix = "mi/h"
+                conv = 2.23693629
+            else:
+                suffix = "km/h"
+                conv = 3.6
+
             if timer == 0:
-                return "N/A km/h"
+                return "N/A " + suffix
             speed = 1.0 *dist / timer
-            #convert from meters per second to kilometers per hour
-            speed *= 3.6
-            return "%.2f km/h" % speed
+            #convert from meters per second to km/h or mi/h
+            speed *= conv
+            return "%.2f %s" % (speed, suffix)
 
         tdelta = timer
         hours = int(tdelta / 3600)
@@ -159,6 +196,17 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             widget.height = selectorH.get_active(0)
             widget.client.set_int(HEIGHT, widget.height)
 
+        def selectorUnit_changed(selector, data):
+            widget.unit = selectorUnit.get_active(0)
+            widget.client.set_int(UNIT, widget.unit)
+            widget.update_current()
+            widget.update_total()
+
+        def selectorUI_changed(selector, data):
+            widget.aspect = selectorUI.get_active(0)
+            widget.client.set_int(ASPECT, widget.aspect)
+            widget.update_aspect()
+
         dialog = gtk.Dialog()
         dialog.set_transient_for(self)
         dialog.set_title("Settings")
@@ -196,9 +244,38 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         heightPicker.set_selector(selectorH)
         heightPicker.set_active(widget.height)
 
+        selectorUnit = hildon.TouchSelector(text=True)
+        selectorUnit.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
+        selectorUnit.append_text("Metric (km)")
+        selectorUnit.append_text("English (mi)")
+        selectorUnit.connect("changed", selectorUnit_changed)
+
+        unitPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        unitPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
+        unitPicker.set_title("Units")
+        unitPicker.set_selector(selectorUnit)
+        unitPicker.set_active(widget.unit)
+
+        selectorUI = hildon.TouchSelector(text=True)
+        selectorUI = hildon.TouchSelector(text=True)
+        selectorUI.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
+        selectorUI.append_text("Show current + total")
+        selectorUI.append_text("Show only current")
+        selectorUI.append_text("Show only total")
+        selectorUI.connect("changed", selectorUI_changed)
+
+        UIPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        UIPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
+        UIPicker.set_title("Widget aspect")
+        UIPicker.set_selector(selectorUI)
+        UIPicker.set_active(widget.aspect)
+
         dialog.vbox.add(button)
         dialog.vbox.add(modePicker)
         dialog.vbox.add(heightPicker)
+        dialog.vbox.add(unitPicker)
+        dialog.vbox.add(UIPicker)
+
         dialog.show_all()
         response = dialog.run()
         hildon.hildon_banner_show_information(self, "None", "You have to Stop/Start the counter to apply the new settings")
@@ -231,9 +308,11 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             self.pedometer.request_stop()
             self.pedometer.join()
             self.client.set_int(COUNTER, self.totalCounter)
-            self.client.set_int(COUNTER, int(self.totalTime))
+            self.client.set_int(TIMER, int(self.totalTime))
             self.button.set_label("Start")
+            self.desc.hide_all()
         else:
+            self.desc.show_all()
             self.pedometer = PedoCounter(self.update_values)
             self.pedometer.set_mode(self.mode)
             self.pedometer.set_height(self.height)
