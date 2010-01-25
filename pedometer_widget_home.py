@@ -11,21 +11,29 @@ print "!!!!"
 
 PATH="/apps/pedometerhomewidget"
 COUNTER=PATH+"/counter"
+TIMER=PATH+"/timer"
 MODE=PATH+"/mode"
 HEIGHT=PATH+"/height"
 
 class PedometerHomePlugin(hildondesktop.HomePluginItem):
     button = None
-    loader = None
-    labelTimer = None
-    labelLastCount = None
-    labelTotalCount = None
-    labelDistance = None
-    labelAvgDistance = None
+
+    #labels for current steps
+    labelsC = { "timer" : None, "count" : None, "dist" : None, "avgSpeed" : None }
+
+    #labels for all time steps
+    labelsT = { "timer" : None, "count" : None, "dist" : None, "avgSpeed" : None }
 
     pedometer = None
     startTime = None
+
     totalCounter = 0
+    totalTime = 0
+    mode = 0
+    height = 0
+
+    counter = 0
+    time = 0
 
     def __init__(self):
 
@@ -35,43 +43,112 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         self.client = gconf.client_get_default()
         try:
             self.totalCounter = self.client.get_int(COUNTER)
+            self.totalTime = self.client.get_int(TIMER)
             self.mode = self.client.get_int(MODE)
             self.height = self.client.get_int(HEIGHT)
         except:
             self.client.set_int(COUNTER, 0)
+            self.client.set_int(TIMER, 0)
             self.client.set_int(MODE, 0)
             self.client.set_int(HEIGHT, 0)
-            self.totalCounter = 0
-            self.mode = 0
-            self.height = 0
+
+        self.pedometer = PedoCounter(self.update_values)
+        self.pedometer.set_mode(self.mode)
+        self.pedometer.set_height(self.height)
 
         self.button = gtk.Button("Start")
         self.button.connect("clicked", self.button_clicked)
 
-        self.labelTimer = gtk.Label("00:00:00")
-        self.labelLastCount = gtk.Label("--")
-        self.labelTotalCount = gtk.Label("%d steps" % self.totalCounter)
-        self.labelDistance = gtk.Label("--")
+        self.create_labels(self.labelsC)
+        self.create_labels(self.labelsT)
 
-        mainVBox = gtk.VBox(spacing=1)
-        mainVBox.add(self.button)
-        mainVBox.add(self.labelTimer)
-        mainVBox.add(self.labelLastCount)
-        mainVBox.add(self.labelTotalCount)
-        mainVBox.add(self.labelDistance)
+        self.update_ui_values(self.labelsC, 0, 0)
+        self.update_ui_values(self.labelsT, self.totalTime, self.totalCounter)
 
-        mainVBox.show_all()
-        self.add(mainVBox)
+        mainHBox = gtk.HBox(spacing=1)
+
+        descVBox = gtk.VBox(spacing=1)
+        descVBox.add(gtk.Label())
+        descVBox.add(gtk.Label("Time:"))
+        descVBox.add(gtk.Label("Steps:"))
+        descVBox.add(gtk.Label("Distance:"))
+        descVBox.add(gtk.Label("Avg Speed:"))
+
+        currentVBox = gtk.VBox(spacing=1)
+        currentVBox.add(gtk.Label("Current"))
+        currentVBox.add(self.labelsC["timer"])
+        currentVBox.add(self.labelsC["count"])
+        currentVBox.add(self.labelsC["dist"])
+        currentVBox.add(self.labelsC["avgSpeed"])
+
+        totalVBox = gtk.VBox(spacing=1)
+        totalVBox.add(gtk.Label("Total"))
+        totalVBox.add(self.labelsT["timer"])
+        totalVBox.add(self.labelsT["count"])
+        totalVBox.add(self.labelsT["dist"])
+        totalVBox.add(self.labelsT["avgSpeed"])
+
+        mainHBox.add(self.button)
+        mainHBox.add(descVBox)
+        mainHBox.add(currentVBox)
+        mainHBox.add(totalVBox)
+
+        mainHBox.show_all()
+        self.add(mainHBox)
 
         self.connect("unrealize", self.close_requested)
         self.set_settings(True)
         self.connect("show-settings", self.show_settings)
 
+    def create_labels(self, labels):
+        labels["timer"] = gtk.Label()
+        labels["count"] = gtk.Label()
+        labels["dist"] = gtk.Label()
+        labels["avgSpeed"] = gtk.Label()
+
+    def update_ui_values(self, labels, timer, steps):
+        def get_str_distance(meters):
+            if meters > 1000:
+                return str(meters/1000) + " km"
+            else:
+                return str(meters) + " m"
+
+        def get_avg_speed(timer, dist):
+            if timer == 0:
+                return "N/A km/h"
+            speed = 1.0 *dist / timer
+            #convert from meters per second to kilometers per hour
+            speed *= 3.6
+            return "%.2f km/h" % speed
+
+        tdelta = timer
+        hours = int(tdelta / 3600)
+        tdelta -= 3600 * hours
+        mins = int(tdelta / 60)
+        tdelta -= 60 * mins
+        secs = int(tdelta)
+
+        strtime = "%.2d:%.2d:%.2d" % ( hours, mins, secs)
+
+        labels["timer"].set_label(strtime)
+        labels["count"].set_label(str(steps))
+
+        dist = self.pedometer.get_distance(steps)
+
+        labels["dist"].set_label(get_str_distance(dist))
+        labels["avgSpeed"].set_label(get_avg_speed(timer, dist))
+
+    def update_current(self):
+        self.update_ui_values(self.labelsC, self.time, self.counter)
+
+    def update_total(self):
+        self.update_ui_values(self.labelsT, self.totalTime, self.totalCounter)
 
     def show_settings(self, widget):
         def reset_total_counter(arg):
             widget.totalCounter = 0
-            widget.labelTotalCount.set_label("%d steps" % widget.totalCounter)
+            widget.totalTime = 0
+            widget.update_total()
             hildon.hildon_banner_show_information(self,"None", "Total counter was resetted")
 
         def selector_changed(selector, data):
@@ -136,27 +213,15 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             self.pedometer.join()
 
     def update_values(self, totalCurent, lastInterval):
-        print "update"
-
         self.totalCounter += lastInterval
-        dist = self.pedometer.get_distance(self.totalCounter)
+        self.counter = totalCurent
 
-        tdelta = time.time() - self.startTime
-        hours = int(tdelta / 3600)
-        tdelta -= 3600 * hours
-        mins = int(tdelta / 60)
-        tdelta -= 60 * mins
-        secs = int(tdelta)
+        tdelta = time.time() - self.time - self.startTime
+        self.time += tdelta
+        self.totalTime += tdelta
 
-        strtime = "%.2d:%.2d:%.2d" % ( hours, mins, secs)
-
-        self.labelTimer.set_label(strtime)
-        self.labelLastCount.set_label(str(totalCurent) + " steps")
-        self.labelTotalCount.set_label(str(self.totalCounter) + " steps")
-        if dist >= 1000:
-            self.labelDistance.set_label(str(dist/1000) + " km")
-        else:
-            self.labelDistance.set_label(str(dist) + " m")
+        self.update_current()
+        self.update_total()
 
     def button_clicked(self, button):
         print "button clicked"
@@ -166,16 +231,17 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             self.pedometer.request_stop()
             self.pedometer.join()
             self.client.set_int(COUNTER, self.totalCounter)
+            self.client.set_int(COUNTER, int(self.totalTime))
             self.button.set_label("Start")
         else:
             self.pedometer = PedoCounter(self.update_values)
             self.pedometer.set_mode(self.mode)
             self.pedometer.set_height(self.height)
 
-            self.labelTimer.set_label("00:00:00")
-            self.labelLastCount.set_label("0 steps")
-            self.labelTotalCount.set_label("%d steps" % self.totalCounter)
-            self.labelDistance.set_label("0 m")
+            self.time = 0
+            self.counter = 0
+
+            self.update_current()
 
             self.pedometer.start()
             self.startTime = time.time()
@@ -193,8 +259,6 @@ if __name__ == "__main__":
     obj = gobject.new(hd_plugin_type, plugin_id="plugin_id")
     obj.show_all()
     gtk.main()
-
-
 
 ############### old pedometer.py ###
 import math
