@@ -16,6 +16,7 @@ MODE=PATH+"/mode"
 HEIGHT=PATH+"/height"
 UNIT=PATH+"/unit"
 ASPECT=PATH+"/aspect"
+LOGGING=PATH+"/logging"
 
 class PedometerHomePlugin(hildondesktop.HomePluginItem):
     button = None
@@ -38,6 +39,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
     counter = 0
     time = 0
     aspect = 0
+    logging = False
 
     def __init__(self):
 
@@ -52,6 +54,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             self.height = self.client.get_int(HEIGHT)
             self.unit = self.client.get_int(UNIT)
             self.aspect = self.client.get_int(ASPECT)
+            self.logging = self.client.get_bool(LOGGING)
         except:
             self.client.set_int(COUNTER, 0)
             self.client.set_int(TIMER, 0)
@@ -59,6 +62,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             self.client.set_int(HEIGHT, 0)
             self.client.set_int(UNIT, 0)
             self.client.set_int(ASPECT, 0)
+            self.client.set_bool(LOGGING, False)
 
         self.pedometer = PedoCounter(self.update_values)
         self.pedometer.set_mode(self.mode)
@@ -103,6 +107,8 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         mainHBox.add(currentVBox)
         mainHBox.add(totalVBox)
 
+        self.mainhbox = mainHBox
+
         mainHBox.show_all()
         self.add(mainHBox)
         self.update_aspect()
@@ -132,14 +138,14 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         def get_str_distance(meters):
             if meters > 1000:
                 if self.unit == 0:
-                    return str(meters/1000) + " km"
+                    return "%.2f km" % (meters/1000)
                 else:
-                    return str(meters/1609.344) + " mi"
+                    return "%.2f mi" % (meters/1609.344)
             else:
                 if self.unit == 0:
-                    return str(meters) + " m"
+                    return "%d m" % meters
                 else:
-                    return str(meters*3.2808) + " ft"
+                    return "%d ft" % int(meters*3.2808)
 
         def get_avg_speed(timer, dist):
             suffix = ""
@@ -207,6 +213,12 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             widget.client.set_int(ASPECT, widget.aspect)
             widget.update_aspect()
 
+        def logButton_changed(checkButton):
+            widget.logging = checkButton.get_active()
+            print "logButton"
+            print widget.logging
+            widget.client.set_bool(LOGGING, widget.logging)
+
         dialog = gtk.Dialog()
         dialog.set_transient_for(self)
         dialog.set_title("Settings")
@@ -270,11 +282,17 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         UIPicker.set_selector(selectorUI)
         UIPicker.set_active(widget.aspect)
 
+        logButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
+        logButton.set_label("Log data")
+        logButton.set_active(widget.logging)
+        logButton.connect("toggled", logButton_changed)
+
         dialog.vbox.add(button)
         dialog.vbox.add(modePicker)
         dialog.vbox.add(heightPicker)
         dialog.vbox.add(unitPicker)
         dialog.vbox.add(UIPicker)
+        dialog.vbox.add(logButton)
 
         dialog.show_all()
         response = dialog.run()
@@ -310,12 +328,11 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             self.client.set_int(COUNTER, self.totalCounter)
             self.client.set_int(TIMER, int(self.totalTime))
             self.button.set_label("Start")
-            self.desc.hide_all()
         else:
-            self.desc.show_all()
             self.pedometer = PedoCounter(self.update_values)
             self.pedometer.set_mode(self.mode)
             self.pedometer.set_height(self.height)
+            self.pedometer.set_logging(self.logging)
 
             self.time = 0
             self.counter = 0
@@ -435,6 +452,7 @@ class PedoIntervalCounter:
 class PedoCounter(Thread):
     COORD_FNAME = "/sys/class/i2c-adapter/i2c-3/3-001d/coord"
     COORD_FNAME_SDK = "/home/andrei/pedometer-widget-0.1/date.txt"
+    LOGFILE = "/home/user/log_pedometer"
     COORD_GET_INTERVAL = 0.01
     COUNT_INTERVAL = 5
 
@@ -446,6 +464,7 @@ class PedoCounter(Thread):
     counter = 0
     stop_requested = False
     update_function = None
+    logging = False
 
     def __init__(self, update_function = None):
         Thread.__init__(self)
@@ -457,25 +476,28 @@ class PedoCounter(Thread):
     def set_mode(self, mode):
         #runnig, higher threshold to prevent fake steps
         if mode == 1:
-            self.MIN_THRESHOLD = 600
+            self.MIN_THRESHOLD = 650
             self.MIN_TIME_STEPS = 0.35
         #walking
         else:
             self.MIN_THRESHOLD = 500
             self.MIN_TIME_STEPS = 0.5
 
+    def set_logging(self, value):
+        self.logging = value
+
     #set height, will affect the distance
     def set_height(self, height_interval):
         if height_interval == 0:
-            STEP_LENGTH = 0.5
+            STEP_LENGTH = 0.59
         elif height_interval == 1:
-            STEP_LENGTH = 0.6
+            STEP_LENGTH = 0.64
         elif height_interval == 2:
-            STEP_LENGTH = 0.7
+            STEP_LENGTH = 0.71
         elif height_interval == 3:
-            STEP_LENGTH = 0.8
+            STEP_LENGTH = 0.77
         elif height_interval == 4:
-            STEP_LENGTH = 0.9
+            STEP_LENGTH = 0.83
 
     def get_rotation(self):
         f = open(self.COORD_FNAME, 'r')
@@ -500,6 +522,9 @@ class PedoCounter(Thread):
             coords[1].append(int(y))
             coords[2].append(int(z))
             now = time.time()-stime
+            if self.logging:
+                self.file.write("%d %d %d %f\n" %(coords[0][-1], coords[1][-1], coords[2][-1], now))
+
             t.append(now)
             time.sleep(self.COORD_GET_INTERVAL)
         pic = PedoIntervalCounter(coords, t)
@@ -516,10 +541,18 @@ class PedoCounter(Thread):
 
     def run(self):
         logger.info("Thread started")
+        print self.logging
+        if self.logging:
+            fname = "%d_%d_%d_%d_%d_%d" % time.localtime()[0:6]
+            self.file = open(self.LOGFILE + fname + ".txt", "w")
+
         while 1 and not self.stop_requested:
             last_cnt = self.start_interval()
             if self.update_function is not None:
                 gobject.idle_add(self.update_function, self.counter, last_cnt)
+
+        if self.logging:
+            self.file.close()
 
         logger.info("Thread has finished")
 
