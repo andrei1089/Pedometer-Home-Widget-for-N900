@@ -1,13 +1,16 @@
 import gtk
+import cairo
 import hildondesktop
 import gobject
 import os
 import time
 import hildon
 import gnome.gconf as gconf
+from threading import Thread
 
-print "!!!!"
-#gobject.threads_init()
+gobject.threads_init()
+#gtk.gdk.threads_init()
+#print "!!!!"
 
 PATH="/apps/pedometerhomewidget"
 COUNTER=PATH+"/counter"
@@ -18,357 +21,7 @@ UNIT=PATH+"/unit"
 ASPECT=PATH+"/aspect"
 LOGGING=PATH+"/logging"
 
-class PedometerHomePlugin(hildondesktop.HomePluginItem):
-    button = None
-
-    #labels for current steps
-    labelsC = { "timer" : None, "count" : None, "dist" : None, "avgSpeed" : None }
-
-    #labels for all time steps
-    labelsT = { "timer" : None, "count" : None, "dist" : None, "avgSpeed" : None }
-
-    pedometer = None
-    startTime = None
-
-    totalCounter = 0
-    totalTime = 0
-    mode = 0
-    height = 0
-    unit = 0
-
-    counter = 0
-    time = 0
-    aspect = 0
-    logging = False
-
-    def __init__(self):
-
-        gtk.gdk.threads_init()
-        hildondesktop.HomePluginItem.__init__(self)
-
-        self.client = gconf.client_get_default()
-        try:
-            self.totalCounter = self.client.get_int(COUNTER)
-            self.totalTime = self.client.get_int(TIMER)
-            self.mode = self.client.get_int(MODE)
-            self.height = self.client.get_int(HEIGHT)
-            self.unit = self.client.get_int(UNIT)
-            self.aspect = self.client.get_int(ASPECT)
-            self.logging = self.client.get_bool(LOGGING)
-        except:
-            self.client.set_int(COUNTER, 0)
-            self.client.set_int(TIMER, 0)
-            self.client.set_int(MODE, 0)
-            self.client.set_int(HEIGHT, 0)
-            self.client.set_int(UNIT, 0)
-            self.client.set_int(ASPECT, 0)
-            self.client.set_bool(LOGGING, False)
-
-        self.pedometer = PedoCounter(self.update_values)
-        self.pedometer.set_mode(self.mode)
-        self.pedometer.set_height(self.height)
-
-        self.button = gtk.Button("Start")
-        self.button.connect("clicked", self.button_clicked)
-
-        self.create_labels(self.labelsC)
-        self.create_labels(self.labelsT)
-
-        self.update_ui_values(self.labelsC, 0, 0)
-        self.update_ui_values(self.labelsT, self.totalTime, self.totalCounter)
-
-        mainHBox = gtk.HBox(spacing=1)
-
-        descVBox = gtk.VBox(spacing=1)
-        descVBox.add(gtk.Label())
-        descVBox.add(gtk.Label("Time:"))
-        descVBox.add(gtk.Label("Steps:"))
-        descVBox.add(gtk.Label("Distance:"))
-        descVBox.add(gtk.Label("Avg Speed:"))
-
-        currentVBox = gtk.VBox(spacing=1)
-        currentVBox.add(gtk.Label("Current"))
-        currentVBox.add(self.labelsC["timer"])
-        currentVBox.add(self.labelsC["count"])
-        currentVBox.add(self.labelsC["dist"])
-        currentVBox.add(self.labelsC["avgSpeed"])
-        self.currentBox = currentVBox
-
-        totalVBox = gtk.VBox(spacing=1)
-        totalVBox.add(gtk.Label("Total"))
-        totalVBox.add(self.labelsT["timer"])
-        totalVBox.add(self.labelsT["count"])
-        totalVBox.add(self.labelsT["dist"])
-        totalVBox.add(self.labelsT["avgSpeed"])
-        self.totalBox = totalVBox
-
-        mainHBox.add(self.button)
-        mainHBox.add(descVBox)
-        mainHBox.add(currentVBox)
-        mainHBox.add(totalVBox)
-
-        self.mainhbox = mainHBox
-
-        mainHBox.show_all()
-        self.add(mainHBox)
-        self.update_aspect()
-
-        self.connect("unrealize", self.close_requested)
-        self.set_settings(True)
-        self.connect("show-settings", self.show_settings)
-
-    def create_labels(self, labels):
-        labels["timer"] = gtk.Label()
-        labels["count"] = gtk.Label()
-        labels["dist"] = gtk.Label()
-        labels["avgSpeed"] = gtk.Label()
-
-    def update_aspect(self):
-        if self.aspect == 0:
-            self.currentBox.show_all()
-            self.totalBox.show_all()
-        elif self.aspect == 1:
-            self.currentBox.show_all()
-            self.totalBox.hide_all()
-        else:
-            self.currentBox.hide_all()
-            self.totalBox.show_all()
-
-    def update_ui_values(self, labels, timer, steps):
-        def get_str_distance(meters):
-            if meters > 1000:
-                if self.unit == 0:
-                    return "%.2f km" % (meters/1000)
-                else:
-                    return "%.2f mi" % (meters/1609.344)
-            else:
-                if self.unit == 0:
-                    return "%d m" % meters
-                else:
-                    return "%d ft" % int(meters*3.2808)
-
-        def get_avg_speed(timer, dist):
-            suffix = ""
-            conv = 0
-            if self.unit:
-                suffix = "mi/h"
-                conv = 2.23693629
-            else:
-                suffix = "km/h"
-                conv = 3.6
-
-            if timer == 0:
-                return "N/A " + suffix
-            speed = 1.0 *dist / timer
-            #convert from meters per second to km/h or mi/h
-            speed *= conv
-            return "%.2f %s" % (speed, suffix)
-
-        tdelta = timer
-        hours = int(tdelta / 3600)
-        tdelta -= 3600 * hours
-        mins = int(tdelta / 60)
-        tdelta -= 60 * mins
-        secs = int(tdelta)
-
-        strtime = "%.2d:%.2d:%.2d" % ( hours, mins, secs)
-
-        labels["timer"].set_label(strtime)
-        labels["count"].set_label(str(steps))
-
-        dist = self.pedometer.get_distance(steps)
-
-        labels["dist"].set_label(get_str_distance(dist))
-        labels["avgSpeed"].set_label(get_avg_speed(timer, dist))
-
-    def update_current(self):
-        self.update_ui_values(self.labelsC, self.time, self.counter)
-
-    def update_total(self):
-        self.update_ui_values(self.labelsT, self.totalTime, self.totalCounter)
-
-    def show_settings(self, widget):
-        def reset_total_counter(arg):
-            widget.totalCounter = 0
-            widget.totalTime = 0
-            widget.update_total()
-            hildon.hildon_banner_show_information(self,"None", "Total counter was resetted")
-
-        def selector_changed(selector, data):
-            widget.mode = selector.get_active(0)
-            widget.client.set_int(MODE, widget.mode)
-
-        def selectorH_changed(selector, data):
-            widget.height = selectorH.get_active(0)
-            widget.client.set_int(HEIGHT, widget.height)
-
-        def selectorUnit_changed(selector, data):
-            widget.unit = selectorUnit.get_active(0)
-            widget.client.set_int(UNIT, widget.unit)
-            widget.update_current()
-            widget.update_total()
-
-        def selectorUI_changed(selector, data):
-            widget.aspect = selectorUI.get_active(0)
-            widget.client.set_int(ASPECT, widget.aspect)
-            widget.update_aspect()
-
-        def logButton_changed(checkButton):
-            widget.logging = checkButton.get_active()
-            print "logButton"
-            print widget.logging
-            widget.client.set_bool(LOGGING, widget.logging)
-
-        dialog = gtk.Dialog()
-        dialog.set_transient_for(self)
-        dialog.set_title("Settings")
-
-        dialog.add_button("OK", gtk.RESPONSE_OK)
-        button = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        button.set_title("Reset total counter")
-        button.set_alignment(0, 0.8, 1, 1)
-        button.connect("clicked", reset_total_counter)
-
-        selector = hildon.TouchSelector(text=True)
-        selector.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
-        selector.append_text("Walk")
-        selector.append_text("Run")
-        selector.connect("changed", selector_changed)
-
-        modePicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        modePicker.set_alignment(0.0, 0.5, 1.0, 1.0)
-        modePicker.set_title("Select mode")
-        modePicker.set_selector(selector)
-        modePicker.set_active(widget.mode)
-
-        selectorH = hildon.TouchSelector(text=True)
-        selectorH.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
-        selectorH.append_text("< 1.50 m")
-        selectorH.append_text("1.50 - 1.65 m")
-        selectorH.append_text("1.66 - 1.80 m")
-        selectorH.append_text("1.81 - 1.95 m")
-        selectorH.append_text(" > 1.95 m")
-        selectorH.connect("changed", selectorH_changed)
-
-        heightPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        heightPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
-        heightPicker.set_title("Select height")
-        heightPicker.set_selector(selectorH)
-        heightPicker.set_active(widget.height)
-
-        selectorUnit = hildon.TouchSelector(text=True)
-        selectorUnit.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
-        selectorUnit.append_text("Metric (km)")
-        selectorUnit.append_text("English (mi)")
-        selectorUnit.connect("changed", selectorUnit_changed)
-
-        unitPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        unitPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
-        unitPicker.set_title("Units")
-        unitPicker.set_selector(selectorUnit)
-        unitPicker.set_active(widget.unit)
-
-        selectorUI = hildon.TouchSelector(text=True)
-        selectorUI = hildon.TouchSelector(text=True)
-        selectorUI.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
-        selectorUI.append_text("Show current + total")
-        selectorUI.append_text("Show only current")
-        selectorUI.append_text("Show only total")
-        selectorUI.connect("changed", selectorUI_changed)
-
-        UIPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        UIPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
-        UIPicker.set_title("Widget aspect")
-        UIPicker.set_selector(selectorUI)
-        UIPicker.set_active(widget.aspect)
-
-        logButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
-        logButton.set_label("Log data")
-        logButton.set_active(widget.logging)
-        logButton.connect("toggled", logButton_changed)
-
-        dialog.vbox.add(button)
-        dialog.vbox.add(modePicker)
-        dialog.vbox.add(heightPicker)
-        dialog.vbox.add(unitPicker)
-        dialog.vbox.add(UIPicker)
-        dialog.vbox.add(logButton)
-
-        dialog.show_all()
-        response = dialog.run()
-        hildon.hildon_banner_show_information(self, "None", "You have to Stop/Start the counter to apply the new settings")
-        dialog.destroy()
-
-    def close_requested(self, widget):
-        if self.pedometer is None:
-            return
-
-        self.pedometer.request_stop()
-        if self.pedometer.isAlive():
-            self.pedometer.join()
-
-    def update_values(self, totalCurent, lastInterval):
-        self.totalCounter += lastInterval
-        self.counter = totalCurent
-
-        tdelta = time.time() - self.time - self.startTime
-        self.time += tdelta
-        self.totalTime += tdelta
-
-        self.update_current()
-        self.update_total()
-
-    def button_clicked(self, button):
-        print "button clicked"
-
-        if self.pedometer is not None and self.pedometer.isAlive():
-            #counter is running
-            self.pedometer.request_stop()
-            self.pedometer.join()
-            self.client.set_int(COUNTER, self.totalCounter)
-            self.client.set_int(TIMER, int(self.totalTime))
-            self.button.set_label("Start")
-        else:
-            self.pedometer = PedoCounter(self.update_values)
-            self.pedometer.set_mode(self.mode)
-            self.pedometer.set_height(self.height)
-            self.pedometer.set_logging(self.logging)
-
-            self.time = 0
-            self.counter = 0
-
-            self.update_current()
-
-            self.pedometer.start()
-            self.startTime = time.time()
-            self.button.set_label("Stop")
-
-        print "button clicked finished"
-
-hd_plugin_type = PedometerHomePlugin
-
-# The code below is just for testing purposes.
-# It allows to run the widget as a standalone process.
-if __name__ == "__main__":
-    import gobject
-    gobject.type_register(hd_plugin_type)
-    obj = gobject.new(hd_plugin_type, plugin_id="plugin_id")
-    obj.show_all()
-    gtk.main()
-
-############### old pedometer.py ###
-import math
-import logging
-
-from threading import Thread
-
-logger = logging.getLogger("pedometer")
-logger.setLevel(logging.INFO)
-
-ch = logging.StreamHandler()
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-ch.setFormatter(formatter)
-logger.addHandler(ch)
+ICONSPATH = "/opt/pedometerhomewidget/"
 
 class PedoIntervalCounter:
     MIN_THRESHOLD = 500
@@ -541,7 +194,6 @@ class PedoCounter(Thread):
 
     def run(self):
         logger.info("Thread started")
-        print self.logging
         if self.logging:
             fname = "%d_%d_%d_%d_%d_%d" % time.localtime()[0:6]
             self.file = open(self.LOGFILE + fname + ".txt", "w")
@@ -560,4 +212,444 @@ class PedoCounter(Thread):
         if steps == None:
             steps = self.counter
         return self.STEP_LENGTH * steps;
+
+class CustomButton(hildon.Button):
+    def __init__(self, icon):
+        hildon.Button.__init__(self, gtk.HILDON_SIZE_AUTO_WIDTH, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        self.icon = icon
+        self.set_size_request(int(32*1.4), int(30*1.0))
+        self.retval = self.connect("expose_event", self.expose)
+
+    def set_icon(self, icon):
+        self.icon = icon
+
+    def expose(self, widget, event):
+        self.context = widget.window.cairo_create()
+        self.context.rectangle(event.area.x, event.area.y,
+                            event.area.width, event.area.height)
+
+        self.context.clip()
+        rect = self.get_allocation()
+        self.context.rectangle(rect.x, rect.y, rect.width, rect.height)
+        self.context.set_source_rgba(1, 1, 1, 0)
+
+        style = self.rc_get_style()
+        color = style.lookup_color("DefaultBackgroundColor")
+        if self.state == gtk.STATE_ACTIVE:
+            style = self.rc_get_style()
+            color = style.lookup_color("SelectionColor")
+            self.context.set_source_rgba (color.red/65535.0, color.green/65335.0, color.blue/65535.0, 0.75);
+        self.context.fill()
+
+        #img = cairo.ImageSurface.create_from_png(self.icon)
+
+        #self.context.set_source_surface(img)
+        #self.context.set_source_surface(img, rect.width/2 - img.get_width() /2, 0)
+        img = gtk.Image()
+        img.set_from_file(self.icon)
+        buf = img.get_pixbuf()
+        buf =  buf.scale_simple(int(32 * 1.5), int(30 * 1.5), gtk.gdk.INTERP_BILINEAR)
+
+        self.context.set_source_pixbuf(buf, rect.x+(event.area.width/2-15)-8, rect.y+1)
+        self.context.scale(200,200)
+        self.context.paint()
+
+        return self.retval
+
+class PedometerHomePlugin(hildondesktop.HomePluginItem):
+    button = None
+
+    #labels for current steps
+    labelsC = { "timer" : None, "count" : None, "dist" : None, "avgSpeed" : None }
+
+    #labels for all time steps
+    labelsT = { "timer" : None, "count" : None, "dist" : None, "avgSpeed" : None }
+
+    pedometer = None
+    startTime = None
+
+    totalCounter = 0
+    totalTime = 0
+    mode = 0
+    height = 0
+    unit = 0
+
+    counter = 0
+    time = 0
+    aspect = 0
+    logging = False
+
+    def __init__(self):
+
+        #gtk.gdk.threads_init()
+        hildondesktop.HomePluginItem.__init__(self)
+
+        self.client = gconf.client_get_default()
+        try:
+            self.totalCounter = self.client.get_int(COUNTER)
+            self.totalTime = self.client.get_int(TIMER)
+            self.mode = self.client.get_int(MODE)
+            self.height = self.client.get_int(HEIGHT)
+            self.unit = self.client.get_int(UNIT)
+            self.aspect = self.client.get_int(ASPECT)
+            self.logging = self.client.get_bool(LOGGING)
+        except:
+            self.client.set_int(COUNTER, 0)
+            self.client.set_int(TIMER, 0)
+            self.client.set_int(MODE, 0)
+            self.client.set_int(HEIGHT, 0)
+            self.client.set_int(UNIT, 0)
+            self.client.set_int(ASPECT, 0)
+            self.client.set_bool(LOGGING, False)
+
+        self.pedometer = PedoCounter(self.update_values)
+        self.pedometer.set_mode(self.mode)
+        self.pedometer.set_height(self.height)
+
+        #self.button = gtk.Button("Start")
+        self.button = CustomButton(ICONSPATH + "play.png")
+        self.button.connect("clicked", self.button_clicked)
+
+        self.create_labels(self.labelsC)
+        self.create_labels(self.labelsT)
+
+        self.update_ui_values(self.labelsC, 0, 0)
+        self.update_ui_values(self.labelsT, self.totalTime, self.totalCounter)
+
+        mainHBox = gtk.HBox(spacing=1)
+
+        descVBox = gtk.VBox(spacing=1)
+        descVBox.add(gtk.Label())
+        descVBox.add(gtk.Label("Time:"))
+        descVBox.add(gtk.Label("Steps:"))
+        descVBox.add(gtk.Label("Distance:"))
+        descVBox.add(gtk.Label("Avg Speed:"))
+
+        currentVBox = gtk.VBox(spacing=1)
+        currentVBox.add(gtk.Label("Current"))
+        currentVBox.add(self.labelsC["timer"])
+        currentVBox.add(self.labelsC["count"])
+        currentVBox.add(self.labelsC["dist"])
+        currentVBox.add(self.labelsC["avgSpeed"])
+        self.currentBox = currentVBox
+
+        totalVBox = gtk.VBox(spacing=1)
+        totalVBox.add(gtk.Label("Total"))
+        totalVBox.add(self.labelsT["timer"])
+        totalVBox.add(self.labelsT["count"])
+        totalVBox.add(self.labelsT["dist"])
+        totalVBox.add(self.labelsT["avgSpeed"])
+        self.totalBox = totalVBox
+
+        buttonVBox = gtk.VBox(spacing=1)
+        buttonVBox.add(gtk.Label(""))
+        buttonVBox.add(self.button)
+        buttonVBox.add(gtk.Label(""))
+
+        mainHBox.add(buttonVBox)
+        mainHBox.add(descVBox)
+        mainHBox.add(currentVBox)
+        mainHBox.add(totalVBox)
+
+        self.mainhbox = mainHBox
+
+        mainHBox.show_all()
+        self.add(mainHBox)
+        self.update_aspect()
+
+        self.connect("unrealize", self.close_requested)
+        self.set_settings(True)
+        self.connect("show-settings", self.show_settings)
+
+    def create_labels(self, labels):
+        labels["timer"] = gtk.Label()
+        labels["count"] = gtk.Label()
+        labels["dist"] = gtk.Label()
+        labels["avgSpeed"] = gtk.Label()
+
+    def update_aspect(self):
+        if self.aspect == 0:
+            self.currentBox.show_all()
+            self.totalBox.show_all()
+        elif self.aspect == 1:
+            self.currentBox.show_all()
+            self.totalBox.hide_all()
+        else:
+            self.currentBox.hide_all()
+            self.totalBox.show_all()
+
+    def update_ui_values(self, labels, timer, steps):
+        def get_str_distance(meters):
+            if meters > 1000:
+                if self.unit == 0:
+                    return "%.2f km" % (meters/1000)
+                else:
+                    return "%.2f mi" % (meters/1609.344)
+            else:
+                if self.unit == 0:
+                    return "%d m" % meters
+                else:
+                    return "%d ft" % int(meters*3.2808)
+
+        def get_avg_speed(timer, dist):
+            suffix = ""
+            conv = 0
+            if self.unit:
+                suffix = "mi/h"
+                conv = 2.23693629
+            else:
+                suffix = "km/h"
+                conv = 3.6
+
+            if timer == 0:
+                return "N/A " + suffix
+            speed = 1.0 *dist / timer
+            #convert from meters per second to km/h or mi/h
+            speed *= conv
+            return "%.2f %s" % (speed, suffix)
+
+        tdelta = timer
+        hours = int(tdelta / 3600)
+        tdelta -= 3600 * hours
+        mins = int(tdelta / 60)
+        tdelta -= 60 * mins
+        secs = int(tdelta)
+
+        strtime = "%.2d:%.2d:%.2d" % ( hours, mins, secs)
+
+        labels["timer"].set_label(strtime)
+        labels["count"].set_label(str(steps))
+
+        dist = self.pedometer.get_distance(steps)
+
+        labels["dist"].set_label(get_str_distance(dist))
+        labels["avgSpeed"].set_label(get_avg_speed(timer, dist))
+
+    def update_current(self):
+        self.update_ui_values(self.labelsC, self.time, self.counter)
+
+    def update_total(self):
+        self.update_ui_values(self.labelsT, self.totalTime, self.totalCounter)
+
+    def show_settings(self, widget):
+        def reset_total_counter(arg):
+            widget.totalCounter = 0
+            widget.totalTime = 0
+            widget.update_total()
+            hildon.hildon_banner_show_information(self,"None", "Total counter was resetted")
+
+        def selector_changed(selector, data):
+            widget.mode = selector.get_active(0)
+            widget.client.set_int(MODE, widget.mode)
+
+        def selectorH_changed(selector, data):
+            widget.height = selectorH.get_active(0)
+            widget.client.set_int(HEIGHT, widget.height)
+
+        def selectorUnit_changed(selector, data):
+            widget.unit = selectorUnit.get_active(0)
+            widget.client.set_int(UNIT, widget.unit)
+            widget.update_current()
+            widget.update_total()
+
+        def selectorUI_changed(selector, data):
+            widget.aspect = selectorUI.get_active(0)
+            widget.client.set_int(ASPECT, widget.aspect)
+            widget.update_aspect()
+
+        def logButton_changed(checkButton):
+            widget.logging = checkButton.get_active()
+            widget.client.set_bool(LOGGING, widget.logging)
+
+        dialog = gtk.Dialog()
+        dialog.set_transient_for(self)
+        dialog.set_title("Settings")
+
+        dialog.add_button("OK", gtk.RESPONSE_OK)
+        button = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        button.set_title("Reset total counter")
+        button.set_alignment(0, 0.8, 1, 1)
+        button.connect("clicked", reset_total_counter)
+
+        selector = hildon.TouchSelector(text=True)
+        selector.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
+        selector.append_text("Walk")
+        selector.append_text("Run")
+        selector.connect("changed", selector_changed)
+
+        modePicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        modePicker.set_alignment(0.0, 0.5, 1.0, 1.0)
+        modePicker.set_title("Select mode")
+        modePicker.set_selector(selector)
+        modePicker.set_active(widget.mode)
+
+        selectorH = hildon.TouchSelector(text=True)
+        selectorH.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
+        selectorH.append_text("< 1.50 m")
+        selectorH.append_text("1.50 - 1.65 m")
+        selectorH.append_text("1.66 - 1.80 m")
+        selectorH.append_text("1.81 - 1.95 m")
+        selectorH.append_text(" > 1.95 m")
+        selectorH.connect("changed", selectorH_changed)
+
+        heightPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        heightPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
+        heightPicker.set_title("Select height")
+        heightPicker.set_selector(selectorH)
+        heightPicker.set_active(widget.height)
+
+        selectorUnit = hildon.TouchSelector(text=True)
+        selectorUnit.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
+        selectorUnit.append_text("Metric (km)")
+        selectorUnit.append_text("English (mi)")
+        selectorUnit.connect("changed", selectorUnit_changed)
+
+        unitPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        unitPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
+        unitPicker.set_title("Units")
+        unitPicker.set_selector(selectorUnit)
+        unitPicker.set_active(widget.unit)
+
+        selectorUI = hildon.TouchSelector(text=True)
+        selectorUI = hildon.TouchSelector(text=True)
+        selectorUI.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
+        selectorUI.append_text("Show current + total")
+        selectorUI.append_text("Show only current")
+        selectorUI.append_text("Show only total")
+        selectorUI.connect("changed", selectorUI_changed)
+
+        UIPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        UIPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
+        UIPicker.set_title("Widget aspect")
+        UIPicker.set_selector(selectorUI)
+        UIPicker.set_active(widget.aspect)
+
+        logButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
+        logButton.set_label("Log data")
+        logButton.set_active(widget.logging)
+        logButton.connect("toggled", logButton_changed)
+
+        dialog.vbox.add(button)
+        dialog.vbox.add(modePicker)
+        dialog.vbox.add(heightPicker)
+        dialog.vbox.add(unitPicker)
+        dialog.vbox.add(UIPicker)
+        dialog.vbox.add(logButton)
+
+        dialog.show_all()
+        response = dialog.run()
+        hildon.hildon_banner_show_information(self, "None", "You have to Stop/Start the counter to apply the new settings")
+        dialog.destroy()
+
+    def close_requested(self, widget):
+        if self.pedometer is None:
+            return
+
+        self.pedometer.request_stop()
+        if self.pedometer.isAlive():
+            self.pedometer.join()
+
+    def update_values(self, totalCurent, lastInterval):
+        self.totalCounter += lastInterval
+        self.counter = totalCurent
+
+        tdelta = time.time() - self.time - self.startTime
+        self.time += tdelta
+        self.totalTime += tdelta
+
+        self.update_current()
+        self.update_total()
+
+    def button_clicked(self, button):
+        if self.pedometer is not None and self.pedometer.isAlive():
+            #counter is running
+            self.pedometer.request_stop()
+            self.pedometer.join()
+            self.client.set_int(COUNTER, self.totalCounter)
+            self.client.set_int(TIMER, int(self.totalTime))
+            #self.button.set_label("Start")
+            self.button.set_icon(ICONSPATH + "play.png")
+        else:
+            self.pedometer = PedoCounter(self.update_values)
+            self.pedometer.set_mode(self.mode)
+            self.pedometer.set_height(self.height)
+            self.pedometer.set_logging(self.logging)
+
+
+            self.time = 0
+            self.counter = 0
+
+            self.update_current()
+
+            self.pedometer.start()
+            self.startTime = time.time()
+            #self.button.set_label("Stop")
+            self.button.set_icon(ICONSPATH + "stop.png")
+
+    def do_expose_event(self, event):
+        cr = self.window.cairo_create()
+        cr.region(event.window.get_clip_region())
+        cr.clip()
+        #cr.set_source_rgba(0.4, 0.64, 0.564, 0.5)
+        style = self.rc_get_style()
+        color = style.lookup_color("DefaultBackgroundColor")
+        cr.set_source_rgba (color.red/65535.0, color.green/65335.0, color.blue/65535.0, 0.75);
+
+        radius = 5
+        width = self.allocation.width
+        height = self.allocation.height
+
+        x = self.allocation.x
+        y = self.allocation.y
+
+        cr.move_to(x+radius, y)
+        cr.line_to(x + width - radius, y)
+        cr.curve_to(x + width - radius, y, x + width, y, x + width, y + radius)
+        cr.line_to(x + width, y + height - radius)
+        cr.curve_to(x + width, y + height - radius, x + width, y + height, x + width - radius, y + height)
+        cr.line_to(x + radius, y + height)
+        cr.curve_to(x + radius, y + height, x, y + height, x, y + height - radius)
+        cr.line_to(x, y + radius)
+        cr.curve_to(x, y + radius, x, y, x + radius, y)
+
+        cr.set_operator(cairo.OPERATOR_SOURCE)
+        cr.fill_preserve()
+
+        color = style.lookup_color("ActiveTextColor")
+        cr.set_source_rgba (color.red/65535.0, color.green/65335.0, color.blue/65535.0, 0.5);
+        cr.set_line_width(1)
+        cr.stroke()
+
+        hildondesktop.HomePluginItem.do_expose_event(self, event)
+
+    def do_realize(self):
+        screen = self.get_screen()
+        self.set_colormap(screen.get_rgba_colormap())
+        self.set_app_paintable(True)
+        hildondesktop.HomePluginItem.do_realize(self)
+
+hd_plugin_type = PedometerHomePlugin
+
+# The code below is just for testing purposes.
+# It allows to run the widget as a standalone process.
+if __name__ == "__main__":
+    import gobject
+    gobject.type_register(hd_plugin_type)
+    obj = gobject.new(hd_plugin_type, plugin_id="plugin_id")
+    obj.show_all()
+    gtk.main()
+
+############### old pedometer.py ###
+import math
+import logging
+
+from threading import Thread
+
+logger = logging.getLogger("pedometer")
+logger.setLevel(logging.INFO)
+
+ch = logging.StreamHandler()
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+ch.setFormatter(formatter)
+logger.addHandler(ch)
 
