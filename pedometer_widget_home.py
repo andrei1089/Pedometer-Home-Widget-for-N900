@@ -8,9 +8,8 @@ import hildon
 import gnome.gconf as gconf
 from threading import Thread
 
-gobject.threads_init()
+#gobject.threads_init()
 #gtk.gdk.threads_init()
-#print "!!!!"
 
 PATH="/apps/pedometerhomewidget"
 COUNTER=PATH+"/counter"
@@ -135,6 +134,8 @@ class PedoCounter(Thread):
         else:
             self.MIN_THRESHOLD = 500
             self.MIN_TIME_STEPS = 0.5
+        #update set length
+        self.set_height(self.HEIGHT)
 
     def set_logging(self, value):
         self.logging = value
@@ -151,6 +152,9 @@ class PedoCounter(Thread):
             STEP_LENGTH = 0.77
         elif height_interval == 4:
             STEP_LENGTH = 0.83
+        #increase step length if RUNNING
+        if self.mode == 1:
+            STEP_LENGTH *= 1.45
 
     def get_rotation(self):
         f = open(self.COORD_FNAME, 'r')
@@ -260,10 +264,13 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
     button = None
 
     #labels for current steps
-    labelsC = { "timer" : None, "count" : None, "dist" : None, "avgSpeed" : None }
+    labels = ["timer", "count", "dist", "avgSpeed"]
+    #labelsC = { "timer" : None, "count" : None, "dist" : None, "avgSpeed" : None }
 
     #labels for all time steps
-    labelsT = { "timer" : None, "count" : None, "dist" : None, "avgSpeed" : None }
+    #labelsT = { "timer" : None, "count" : None, "dist" : None, "avgSpeed" : None }
+    labelsC = {}
+    labelsT = {}
 
     pedometer = None
     startTime = None
@@ -281,7 +288,8 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
     def __init__(self):
 
-        #gtk.gdk.threads_init()
+        gtk.gdk.threads_init()
+        #gobject.threads_init()
         hildondesktop.HomePluginItem.__init__(self)
 
         self.client = gconf.client_get_default()
@@ -319,14 +327,14 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         mainHBox = gtk.HBox(spacing=1)
 
         descVBox = gtk.VBox(spacing=1)
-        descVBox.add(gtk.Label())
-        descVBox.add(gtk.Label("Time:"))
-        descVBox.add(gtk.Label("Steps:"))
-        descVBox.add(gtk.Label("Distance:"))
-        descVBox.add(gtk.Label("Avg Speed:"))
+        descVBox.add(self.new_label_heading())
+        descVBox.add(self.new_label_heading("Time:"))
+        descVBox.add(self.new_label_heading("Steps:"))
+        descVBox.add(self.new_label_heading("Distance:"))
+        descVBox.add(self.new_label_heading("Avg Speed:"))
 
         currentVBox = gtk.VBox(spacing=1)
-        currentVBox.add(gtk.Label("Current"))
+        currentVBox.add(self.new_label_heading("Current"))
         currentVBox.add(self.labelsC["timer"])
         currentVBox.add(self.labelsC["count"])
         currentVBox.add(self.labelsC["dist"])
@@ -334,7 +342,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         self.currentBox = currentVBox
 
         totalVBox = gtk.VBox(spacing=1)
-        totalVBox.add(gtk.Label("Total"))
+        totalVBox.add(self.new_label_heading("Total"))
         totalVBox.add(self.labelsT["timer"])
         totalVBox.add(self.labelsT["count"])
         totalVBox.add(self.labelsT["dist"])
@@ -342,9 +350,9 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         self.totalBox = totalVBox
 
         buttonVBox = gtk.VBox(spacing=1)
-        buttonVBox.add(gtk.Label(""))
+        buttonVBox.add(self.new_label_heading(""))
         buttonVBox.add(self.button)
-        buttonVBox.add(gtk.Label(""))
+        buttonVBox.add(self.new_label_heading(""))
 
         mainHBox.add(buttonVBox)
         mainHBox.add(descVBox)
@@ -361,11 +369,17 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         self.set_settings(True)
         self.connect("show-settings", self.show_settings)
 
-    def create_labels(self, labels):
-        labels["timer"] = gtk.Label()
-        labels["count"] = gtk.Label()
-        labels["dist"] = gtk.Label()
-        labels["avgSpeed"] = gtk.Label()
+    def new_label_heading(self, title=""):
+        l = gtk.Label(title)
+        hildon.hildon_helper_set_logical_font(l, "SmallSystemFont")
+        return l
+
+    def create_labels(self, new_labels):
+        for label in self.labels:
+            l = gtk.Label()
+            hildon.hildon_helper_set_logical_font(l, "SmallSystemFont")
+            hildon.hildon_helper_set_logical_color(l, gtk.RC_FG, gtk.STATE_NORMAL, "ActiveTextColor")
+            new_labels[label] = l
 
     def update_aspect(self):
         if self.aspect == 0:
@@ -574,7 +588,6 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             self.pedometer.set_mode(self.mode)
             self.pedometer.set_height(self.height)
             self.pedometer.set_logging(self.logging)
-
 
             self.time = 0
             self.counter = 0
