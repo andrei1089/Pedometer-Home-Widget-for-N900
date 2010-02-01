@@ -118,6 +118,8 @@ class PedoCounter(Thread):
     update_function = None
     logging = False
 
+    mode = 0
+
     def __init__(self, update_function = None):
         Thread.__init__(self)
         if not os.path.exists(self.COORD_FNAME):
@@ -127,6 +129,7 @@ class PedoCounter(Thread):
 
     def set_mode(self, mode):
         #runnig, higher threshold to prevent fake steps
+        self.mode = mode
         if mode == 1:
             self.MIN_THRESHOLD = 650
             self.MIN_TIME_STEPS = 0.35
@@ -134,8 +137,6 @@ class PedoCounter(Thread):
         else:
             self.MIN_THRESHOLD = 500
             self.MIN_TIME_STEPS = 0.5
-        #update set length
-        self.set_height(self.HEIGHT)
 
     def set_logging(self, value):
         self.logging = value
@@ -143,18 +144,18 @@ class PedoCounter(Thread):
     #set height, will affect the distance
     def set_height(self, height_interval):
         if height_interval == 0:
-            STEP_LENGTH = 0.59
+            self.STEP_LENGTH = 0.59
         elif height_interval == 1:
-            STEP_LENGTH = 0.64
+            self.STEP_LENGTH = 0.64
         elif height_interval == 2:
-            STEP_LENGTH = 0.71
+            self.STEP_LENGTH = 0.71
         elif height_interval == 3:
-            STEP_LENGTH = 0.77
+            self.STEP_LENGTH = 0.77
         elif height_interval == 4:
-            STEP_LENGTH = 0.83
+            self.STEP_LENGTH = 0.83
         #increase step length if RUNNING
         if self.mode == 1:
-            STEP_LENGTH *= 1.45
+            self.STEP_LENGTH *= 1.45
 
     def get_rotation(self):
         f = open(self.COORD_FNAME, 'r')
@@ -455,10 +456,18 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         def selector_changed(selector, data):
             widget.mode = selector.get_active(0)
             widget.client.set_int(MODE, widget.mode)
+            widget.pedometer.set_mode(widget.mode)
+            widget.pedometer.set_height(widget.height)
+            widget.update_current()
+            widget.update_total()
 
         def selectorH_changed(selector, data):
             widget.height = selectorH.get_active(0)
             widget.client.set_int(HEIGHT, widget.height)
+            widget.pedometer.set_height(widget.height)
+            widget.update_current()
+            widget.update_total()
+
 
         def selectorUnit_changed(selector, data):
             widget.unit = selectorUnit.get_active(0)
@@ -552,7 +561,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         dialog.show_all()
         response = dialog.run()
-        hildon.hildon_banner_show_information(self, "None", "You have to Stop/Start the counter to apply the new settings")
+        #hildon.hildon_banner_show_information(self, "None", "You have to Stop/Start the counter to apply the new settings")
         dialog.destroy()
 
     def close_requested(self, widget):
