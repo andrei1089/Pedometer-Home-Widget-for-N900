@@ -21,7 +21,7 @@ import gobject
 import os
 import time
 import hildon
-import gnome.gconf as gconf
+import gconf
 
 PATH="/apps/pedometerhomewidget"
 COUNTER=PATH+"/counter"
