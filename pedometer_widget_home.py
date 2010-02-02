@@ -507,7 +507,6 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             widget.client.set_bool(LOGGING, widget.logging)
 
         dialog = gtk.Dialog()
-        dialog.set_transient_for(self)
         dialog.set_title("Settings")
 
         dialog.add_button("OK", gtk.RESPONSE_OK)
