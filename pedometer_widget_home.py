@@ -580,10 +580,11 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         vbox.add(heightPicker)
         vbox.add(unitPicker)
         vbox.add(UIPicker)
-        vbox.add(logButton)
+        #vbox.add(logButton)
 
         pan_area.add_with_viewport(vbox)
-        pan_area.set_size_request(-1, 600)
+        pan_area.set_size_request(-1, 300)
+
         dialog.vbox.add(pan_area)
         dialog.show_all()
         response = dialog.run()
