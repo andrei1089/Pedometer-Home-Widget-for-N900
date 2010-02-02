@@ -22,10 +22,6 @@ import os
 import time
 import hildon
 import gnome.gconf as gconf
-from threading import Thread
-
-#gobject.threads_init()
-#gtk.gdk.threads_init()
 
 PATH="/apps/pedometerhomewidget"
 COUNTER=PATH+"/counter"
@@ -117,11 +113,11 @@ class PedoIntervalCounter:
         vals = self.get_best_values(self.x, self.y, self.z)
         return self.count_steps(vals, self.t)
 
-class PedoCounter(Thread):
+class PedoCounter():
     COORD_FNAME = "/sys/class/i2c-adapter/i2c-3/3-001d/coord"
     COORD_FNAME_SDK = "/home/andrei/pedometer-widget-0.1/date.txt"
     LOGFILE = "/home/user/log_pedometer"
-    COORD_GET_INTERVAL = 0.01
+    COORD_GET_INTERVAL = 10
     COUNT_INTERVAL = 5
 
     STEP_LENGTH = 0.7
@@ -133,11 +129,11 @@ class PedoCounter(Thread):
     stop_requested = False
     update_function = None
     logging = False
+    isRunning = False
 
     mode = 0
 
     def __init__(self, update_function = None):
-        Thread.__init__(self)
         if not os.path.exists(self.COORD_FNAME):
             self.COORD_FNAME = self.COORD_FNAME_SDK
 
@@ -185,49 +181,62 @@ class PedoCounter(Thread):
     def get_counter(self):
         return counter
 
-    def start_interval(self):
-        logger.info("New interval started")
-        stime = time.time()
-        t=[]
-        coords = [[], [], []]
-        while not self.stop_requested and (len(t) == 0 or t[-1] < 5):
-            x,y,z = self.get_rotation()
-            coords[0].append(int(x))
-            coords[1].append(int(y))
-            coords[2].append(int(z))
-            now = time.time()-stime
-            if self.logging:
-                self.file.write("%d %d %d %f\n" %(coords[0][-1], coords[1][-1], coords[2][-1], now))
-
-            t.append(now)
-            time.sleep(self.COORD_GET_INTERVAL)
-        pic = PedoIntervalCounter(coords, t)
-        cnt = pic.number_steps()
-
-        logger.info("Number of steps detected for last interval %d, number of coords: %d" % (cnt, len(t)))
-
-        self.counter += cnt
-        logger.info("Total number of steps : %d" % self.counter)
-        return cnt
-
-    def request_stop(self):
-        self.stop_requested = True
-
-    def run(self):
-        logger.info("Thread started")
+    def start(self):
+        logger.info("Counter started")
+        self.isRunning = True
         if self.logging:
             fname = "%d_%d_%d_%d_%d_%d" % time.localtime()[0:6]
             self.file = open(self.LOGFILE + fname + ".txt", "w")
+        gobject.idle_add(self.run)
 
-        while 1 and not self.stop_requested:
-            last_cnt = self.start_interval()
-            if self.update_function is not None:
-                gobject.idle_add(self.update_function, self.counter, last_cnt)
+    def run(self):
+        self.coords = [[], [], []]
+        self.stime = time.time()
+        self.t = []
+        gobject.timeout_add(self.COORD_GET_INTERVAL, self.read_coords)
+        return False
 
+    def read_coords(self):
+        x,y,z = self.get_rotation()
+        self.coords[0].append(int(x))
+        self.coords[1].append(int(y))
+        self.coords[2].append(int(z))
+        now = time.time()-self.stime
+        if self.logging:
+            self.file.write("%d %d %d %f\n" %(self.coords[0][-1], self.coords[1][-1], self.coords[2][-1], now))
+
+        self.t.append(now)
+        #call stop_interval
+        ret = True
+        if self.t[-1] > 5 or self.stop_requested:
+            ret = False
+            gobject.idle_add(self.stop_interval)
+        return ret
+
+    def stop_interval(self):
+        pic = PedoIntervalCounter(self.coords, self.t)
+        cnt = pic.number_steps()
+
+        logger.info("Number of steps detected for last interval %d, number of coords: %d" % (cnt, len(self.t)))
+
+        self.counter += cnt
+        logger.info("Total number of steps : %d" % self.counter)
+        gobject.idle_add(self.update_function, self.counter, cnt)
+
+        if self.stop_requested:
+            gobject.idle_add(self.stop)
+        else:
+            gobject.idle_add(self.run)
+        return False
+
+    def stop(self):
         if self.logging:
             self.file.close()
+        logger.info("Counter has finished")
 
-        logger.info("Thread has finished")
+    def request_stop(self):
+        self.stop_requested = True
+        self.isRunning = False
 
     def get_distance(self, steps=None):
         if steps == None:
@@ -304,8 +313,6 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
     logging = False
 
     def __init__(self):
-        gtk.gdk.threads_init()
-        #gobject.threads_init()
         hildondesktop.HomePluginItem.__init__(self)
 
         self.client = gconf.client_get_default()
@@ -589,8 +596,6 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             return
 
         self.pedometer.request_stop()
-        if self.pedometer.isAlive():
-            self.pedometer.join()
 
     def update_values(self, totalCurent, lastInterval):
         self.totalCounter += lastInterval
@@ -604,10 +609,9 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         self.update_total()
 
     def button_clicked(self, button):
-        if self.pedometer is not None and self.pedometer.isAlive():
+        if self.pedometer is not None and self.pedometer.isRunning:
             #counter is running
             self.pedometer.request_stop()
-            self.pedometer.join()
             self.client.set_int(COUNTER, self.totalCounter)
             self.client.set_int(TIMER, int(self.totalTime))
             #self.button.set_label("Start")
@@ -684,8 +688,6 @@ if __name__ == "__main__":
 ############### old pedometer.py ###
 import math
 import logging
-
-from threading import Thread
 
 logger = logging.getLogger("pedometer")
 logger.setLevel(logging.INFO)
