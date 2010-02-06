@@ -1,0 +1,5 @@
+[Desktop Entry]
+Name=Pedometer Widget
+Comment=Count the number of steps you've made using the N900's accelerometer
+Type=python
+X-Path=pedometer_widget_home.py
