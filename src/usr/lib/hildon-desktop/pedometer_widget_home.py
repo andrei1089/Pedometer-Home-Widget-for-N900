@@ -429,6 +429,10 @@ class PedoController(Singleton):
         self.pedometer.start()
         self.notify(True)
 
+    def reset_all_values(self):
+        self.repository.reset_values()
+        self.notify()
+
     def stop_pedometer(self):
         self.is_running = False
         self.pedometer.request_stop()
@@ -576,7 +580,6 @@ class AlarmController(Singleton):
             logger.error("ERROR: %s, %s" % (err, debug) )
 
     def update(self, optional):
-        print "alarm update"
         diff = self.pedo_controller.get_first() - self.start_value
         if self.type == 0 and diff.time >= self.interval * 60 or \
                    self.type == 1 and diff.steps >= self.interval or \
@@ -1309,10 +1312,12 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
     def show_settings(self, widget):
         def reset_total_counter(arg):
-            widget.totalCounter = 0
-            widget.totalTime = 0
-            widget.update_total()
-            hildon.hildon_banner_show_information(self, "None", "Total counter was resetted")
+            note = hildon.hildon_note_new_confirmation(self.dialog, "Are you sure you want to delete all your pedometer history?")
+            ret = note.run()
+            if ret == gtk.RESPONSE_OK:
+                self.controller.reset_all_values()
+                hildon.hildon_banner_show_information(self, "None", "All history was deleted")
+            note.destroy()
 
         def alarmButton_pressed(widget):
             self.show_alarm_settings(widget)
@@ -1349,12 +1354,12 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         dialog = gtk.Dialog()
         dialog.set_title("Settings")
         dialog.add_button("OK", gtk.RESPONSE_OK)
+        self.dialog = dialog
 
-
-        button = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        button.set_title("Reset total counter")
-        button.set_alignment(0, 0.8, 1, 1)
-        button.connect("clicked", reset_total_counter)
+        resetButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        resetButton.set_title("Reset total counter")
+        resetButton.set_alignment(0, 0.8, 1, 1)
+        resetButton.connect("clicked", reset_total_counter)
 
         alarmButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         alarmButton.set_title("Alarm")
@@ -1430,13 +1435,13 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         pan_area = hildon.PannableArea()
         vbox = gtk.VBox()
-        vbox.add(button)
         vbox.add(alarmButton)
         vbox.add(modePicker)
         vbox.add(heightPicker)
         vbox.add(unitPicker)
         vbox.add(UIPicker)
         vbox.add(idleButton)
+        vbox.add(resetButton)
         #vbox.add(logButton)
 
         pan_area.add_with_viewport(vbox)
