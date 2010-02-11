@@ -25,6 +25,10 @@ import gconf
 import gtk
 import cairo
 
+import pygst
+pygst.require("0.10")
+import gst
+
 import hildondesktop
 import hildon
 
@@ -378,61 +382,6 @@ class PedoRepositoryPickle(PedoRepository):
         except Exception, e:
             logger.error("Error while saving data to pickle: %s" % e)
 
-class AlarmController(Singleton):
-    enable = False
-    fname = "/home/user/MyDocs/.sounds/Ringtones/Bicycle.aac"
-    interval = 5
-    type = 0
-
-    def __init__(self):
-        self.client = gconf.client_get_default()
-        try:
-            self.enable = self.client.get_bool(ALARM_ENABLE)
-            self.fname = self.client.get_string(ALARM_FNAME)
-            self.interval = self.client.get_int(ALARM_INTERVAL)
-            self.type = self.client.get_int(ALARM_TYPE)
-        except:
-            self.client.set_bool(ALARM_ENABLE, self.enable)
-            self.client.set_string(ALARM_FNAME, self.fname)
-            self.client.set_int(ALARM_INTERVAL, self.interval)
-            self.client.set_int(ALARM_TYPE, self.type)
-
-    def update(self):
-        pass
-
-    def play(self):
-        pass
-
-    def set_enable(self, value):
-       self.enable = value
-       self.client.set_bool(ALARM_ENABLE, value)
-
-    def get_enable(self):
-        return self.enable
-
-    def set_alarm_file(self, fname):
-        self.fname = fname
-        self.client.set_string(ALARM_FNAME, fname)
-
-    def get_alarm_file(self):
-        if self.fname == None:
-            return ""
-        return self.fname
-
-    def set_interval(self, interval):
-        self.interval = interval
-        self.client.set_int(ALARM_INTERVAL, interval)
-
-    def get_interval(self):
-        return self.interval
-
-    def set_type(self, type):
-        self.type = type
-        self.client.set_int(ALARM_TYPE, type)
-
-    def get_type(self):
-        return self.type
-
 class PedoController(Singleton):
     mode = 0
     unit = 0
@@ -577,6 +526,118 @@ class PedoController(Singleton):
         for func in self.observers:
             func(optional)
 
+class AlarmController(Singleton):
+    enable = False
+    fname = "/home/user/MyDocs/.sounds/Ringtones/Bicycle.aac"
+    interval = 5
+    type = 0
+
+    player = None
+    is_playing = False
+    pedo_controller = None
+
+    def __init__(self):
+        self.client = gconf.client_get_default()
+        try:
+            self.enable = self.client.get_bool(ALARM_ENABLE)
+            self.fname = self.client.get_string(ALARM_FNAME)
+            self.interval = self.client.get_int(ALARM_INTERVAL)
+            self.type = self.client.get_int(ALARM_TYPE)
+        except:
+            self.client.set_bool(ALARM_ENABLE, self.enable)
+            self.client.set_string(ALARM_FNAME, self.fname)
+            self.client.set_int(ALARM_INTERVAL, self.interval)
+            self.client.set_int(ALARM_TYPE, self.type)
+
+        self.pedo_controller = PedoController()
+        if self.enable:
+            self.init_player()
+            self.pedo_controller.add_observer(self.update)
+            self.start_value = self.pedo_controller.get_first()
+
+    def init_player(self):
+        self.player = gst.element_factory_make("playbin2", "player")
+        fakesink = gst.element_factory_make("fakesink", "fakesink")
+        self.player.set_property("video-sink", fakesink)
+
+        bus = self.player.get_bus()
+        bus.add_signal_watch()
+        bus.connect("message", self.on_message)
+
+    def on_message(self, bus, message):
+        t = message.type
+        if t == gst.MESSAGE_EOS:
+            self.player.set_state(gst.STATE_NULL)
+            self.is_playing = False
+        elif t == gst.MESSAGE_ERROR:
+            self.player.set_state(gst.STATE_NULL)
+            self.is_playing = False
+            err, debug = message.parse_error()
+            logger.error("ERROR: %s, %s" % (err, debug) )
+
+    def update(self, optional):
+        print "alarm update"
+        diff = self.pedo_controller.get_first() - self.start_value
+        if self.type == 0 and diff.time >= self.interval * 60 or \
+                   self.type == 1 and diff.steps >= self.interval or \
+                   self.type == 2 and diff.dist >= self.interval or \
+                   self.type == 3 and diff.calories >= self.interval:
+            self.play()
+            #get new instance of current values
+            self.start_value = PedoValues() + self.pedo_controller.get_first()
+            logger.info("Alarm!")
+
+    def play(self):
+        if self.player is None:
+            self.init_player()
+        if self.is_playing:
+            self.player.set_state(gst.STATE_NULL)
+            self.is_playing = False
+        else:
+            self.player.set_property("uri", "file://" + self.fname)
+            self.player.set_state(gst.STATE_PLAYING)
+            self.is_playing = True
+
+    def stop(self):
+        self.player.set_state(gst.STATE_NULL)
+
+    def set_enable(self, value):
+       self.enable = value
+       self.client.set_bool(ALARM_ENABLE, value)
+       if self.enable:
+           self.init_player()
+           self.pedo_controller.add_observer(self.update)
+           self.start_value = self.pedo_controller.get_first()
+       else:
+           self.stop()
+           self.player = None
+           self.pedo_controller.remove_observer(self.update)
+
+    def get_enable(self):
+        return self.enable
+
+    def set_alarm_file(self, fname):
+        self.fname = fname
+        self.client.set_string(ALARM_FNAME, fname)
+
+    def get_alarm_file(self):
+        if self.fname == None:
+            return ""
+        return self.fname
+
+    def set_interval(self, interval):
+        self.interval = interval
+        self.client.set_int(ALARM_INTERVAL, interval)
+
+    def get_interval(self):
+        return self.interval
+
+    def set_type(self, type):
+        self.type = type
+        self.client.set_int(ALARM_TYPE, type)
+
+    def get_type(self):
+        return self.type
 
 class PedoCounter(Singleton):
     COORD_FNAME = "/sys/class/i2c-adapter/i2c-3/3-001d/coord"
@@ -1229,6 +1290,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         dialog.vbox.add(enableButton)
         dialog.vbox.add(fileButton)
+        dialog.vbox.add(testButton)
         dialog.vbox.add(typePicker)
         dialog.vbox.add(hbox)
         dialog.show_all()
