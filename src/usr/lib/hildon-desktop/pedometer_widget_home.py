@@ -167,7 +167,7 @@ class PedoValues():
                 return "%d m" % self.dist
             else:
                 return "%d ft" % int(self.dist * 3.2808)
-            
+
     def get_avg_speed(self):
         conv = 0
         if self.unit:
@@ -179,7 +179,7 @@ class PedoValues():
             return 0
         speed = 1.0 * self.dist / self.time
         return speed * conv
-    
+
     def get_print_avg_speed(self):
         suffix = ""
         conv = 0
@@ -231,7 +231,7 @@ class PedoRepository(Singleton):
             self.values[when] = values
 
     def get_last_7_days(self):
-        ret = [] 
+        ret = []
         day = date.today()
         for i in range(7):
             try:
@@ -267,17 +267,17 @@ class PedoRepository(Singleton):
         for k, v in self.values.iteritems():
             ret = ret + v
         return ret
-    
+
     def get_today_values(self):
         try:
             return self.values[date.today()]
         except KeyError:
             return PedoValues()
-       
+
     def get_this_week_values(self):
         day = date.today()
         ret = PedoValues()
-        while True: 
+        while True:
             try:
                 ret += self.values[day]
             except:
@@ -285,9 +285,9 @@ class PedoRepository(Singleton):
             if day.weekday() == 0:
                 break
             day = day - timedelta(days=1)
-           
-        return ret 
-            
+
+        return ret
+
 class PedoRepositoryXML(PedoRepository):
     DIR = os.path.join(os.path.expanduser("~"), ".pedometer")
     FILE = os.path.join(DIR, "data.xml")
@@ -310,7 +310,7 @@ class PedoRepositoryXML(PedoRepository):
                 time = float(v.getAttribute("time"))
                 day = date.fromordinal(d)
                 self.values[day] = PedoValues(time, steps, dist, calories)
-                    
+
             f.close()
         except Exception, e:
             logger.error("Error while loading data from xml file: %s" % e)
@@ -340,7 +340,7 @@ class PedoRepositoryXML(PedoRepository):
         except Exception, e:
             logger.error("Error while saving data to xml file: %s" % e)
 
-     
+
 class PedoRepositoryPickle(PedoRepository):
     DIR = os.path.join(os.path.expanduser("~"), ".pedometer")
     FILE = os.path.join(DIR, "pickle.log")
@@ -381,14 +381,14 @@ class PedoController(Singleton):
     startTime = 0
     is_running = False
     graph_controller = None
-    
+
     def __init__(self):
         self.pedometer = PedoCounter(self.steps_detected)
         self.pedometerInterval = PedoIntervalCounter()
         self.pedometerInterval.set_mode(self.mode)
         self.repository = PedoRepositoryXML()
         self.repository.load()
-        
+
         self.graph_controller = GraphController()
         self.load_values()
 
@@ -490,7 +490,7 @@ class PedoController(Singleton):
         if self.callback_update_ui is not None:
             self.callback_update_ui()
         self.graph_controller.update_ui(optional)
-        
+
 class PedoCounter(Singleton):
     COORD_FNAME = "/sys/class/i2c-adapter/i2c-3/3-001d/coord"
     COORD_FNAME_SDK = "/home/andrei/pedometer-widget-0.1/date.txt"
@@ -509,7 +509,7 @@ class PedoCounter(Singleton):
     def __init__(self, update_function=None):
         if not os.path.exists(self.COORD_FNAME):
             self.COORD_FNAME = self.COORD_FNAME_SDK
-            
+
         self.interval_counter = PedoIntervalCounter()
         self.update_function = update_function
 
@@ -622,10 +622,10 @@ class CustomButton(hildon.Button):
         return self.retval
 
 class CustomEventBox(gtk.EventBox):
-   
+
     def __init__(self):
         gtk.EventBox.__init__(self)
-    
+
     def do_expose_event(self, event):
         self.context = self.window.cairo_create()
         self.context.rectangle(event.area.x, event.area.y,
@@ -652,28 +652,28 @@ class GraphController(Singleton):
     def __init__(self):
         self.repository = PedoRepositoryXML()
         self.last_update = 0
-      
+
     def set_graph(self, widget):
-        self.widget = widget 
+        self.widget = widget
         self.update_ui()
-        
+
     def set_current_view(self, view):
         """
         current_view % len(ytitles) - gives the ytitle
         current_view / len(ytitles) - gives the xtitle
-        """ 
-        self.current_view = view 
+        """
+        self.current_view = view
 
         if self.current_view == len(self.ytitles) * len(self.xtitles):
             self.current_view = 0
         self.x_id = self.current_view / len(self.ytitles)
         self.y_id = self.current_view % len(self.ytitles)
-        
+
     def next_view(self):
         self.set_current_view(self.current_view+1)
         self.update_ui()
         return self.current_view
-    
+
     def last_weeks_labels(self):
         d = date.today()
         delta = timedelta(days=7)
@@ -682,7 +682,7 @@ class GraphController(Singleton):
             ret.append(d.strftime("Week %W"))
             d = d - delta
         return ret
-    
+
     def compute_values(self):
         labels = []
         if self.x_id == 0:
@@ -692,17 +692,17 @@ class GraphController(Singleton):
             for i in range(7):
                 labels.append(d.ctime().split()[0])
                 d = d - delta
-            
+
         elif self.x_id == 1:
             values = self.repository.get_last_weeks()
             d = date.today()
             for i in range(7):
                 labels.append(d.strftime("Week %W"))
-                d = d - timedelta(days=7) 
+                d = d - timedelta(days=7)
         else:
-            values = self.repository.get_today() 
+            values = self.repository.get_today()
             #TODO get labels
-       
+
         if self.y_id == 0:
             yvalues = [line.steps for line in values]
         elif self.y_id == 1:
@@ -711,28 +711,25 @@ class GraphController(Singleton):
             yvalues = [line.dist for line in values]
         else:
             yvalues = [line.calories for line in values]
-            
+
         #determine values for y lines in graph
         diff = self.get_best_interval_value(max(yvalues))
         ytext = []
         for i in range(6):
-            s = str(int(i*diff))
-            while len(s) < 5:
-                s = ' ' + s
-            ytext.append(s)
-            
+            ytext.append(str(int(i*diff)))
+
         if self.widget is not None:
             yvalues.reverse()
             labels.reverse()
             self.widget.values = yvalues
             self.widget.ytext = ytext
             self.widget.xtext = labels
-            self.widget.max_value = diff * 5 
+            self.widget.max_value = diff * 5
             self.widget.text = self.xtitles[self.x_id] + " / " + self.ytitles[self.y_id]
             self.widget.queue_draw()
         else:
             logger.error("Widget not set in GraphController")
-        
+
     def get_best_interval_value(self, max_value):
         diff =  1.0 * max_value / 5
         l = len(str(int(diff)))
@@ -741,44 +738,44 @@ class GraphController(Singleton):
         if val == 0:
             val = 1
         return val
-        
+
     def update_ui(self, optional=False):
         """update graph values every x seconds"""
         if optional and self.last_update - time.time() < 600:
             return
         if self.widget is None:
             return
-        
+
         self.compute_values()
         self.last_update = time.time()
-        
+
 class GraphWidget(gtk.DrawingArea):
-    
+
     def __init__(self):
         gtk.DrawingArea.__init__(self)
         self.set_size_request(-1, 150)
         self.yvalues = 5
-        
+
         """sample values"""
         self.ytext = ["   0", "1000", "2000", "3000", "4000", "5000"]
         self.xtext = ["Monday", "Tuesday", "Wednesday","Thursday", "Friday", "Saturday", "Sunday"]
         self.values = [1500, 3400, 4000, 3600, 3200, 0, 4500]
         self.max_value = 5000
         self.text = "All time steps"
-        
+
     def do_expose_event(self, event):
         context = self.window.cairo_create()
-        
+
         # set a clip region for the expose event
         context.rectangle(event.area.x, event.area.y,
                                event.area.width, event.area.height)
         context.clip()
-        
+
         context.save()
-        
+
         context.set_operator(cairo.OPERATOR_SOURCE)
         style = self.rc_get_style()
-       
+
         if self.state == gtk.STATE_ACTIVE:
             color = style.lookup_color("SelectionColor")
         else:
@@ -788,58 +785,65 @@ class GraphWidget(gtk.DrawingArea):
         context.paint()
         context.restore();
         self.draw(context)
-        
+
     def draw(self, cr):
-        space_below = 20 
+        space_below = 20
         space_above = 10
         border_right = 10
         border_left = 30
-        
+
         rect = self.get_allocation()
         x = rect.width
         y = rect.height
-        
+
+        cr.select_font_face("Purisa", cairo.FONT_SLANT_NORMAL,
+            cairo.FONT_WEIGHT_NORMAL)
+        cr.set_font_size(13)
+
+        #check space needed to display ylabels
+        te = cr.text_extents(self.ytext[-1])
+        border_left = te[2] + 7
+
         cr.set_source_rgb(1, 1, 1)
         cr.move_to(border_left, space_above)
         cr.line_to(border_left, y-space_below)
         cr.set_line_width(2)
-        cr.stroke() 
-        
+        cr.stroke()
+
         cr.move_to(border_left, y-space_below)
         cr.line_to(x-border_right, y-space_below)
         cr.set_line_width(2)
-        cr.stroke() 
-       
-        ydiff = (y-space_above-space_below) / self.yvalues 
+        cr.stroke()
+
+        ydiff = (y-space_above-space_below) / self.yvalues
         for i in range(self.yvalues):
             yy = y-space_below-ydiff*(i+1)
             cr.move_to(border_left, yy)
             cr.line_to(x-border_right, yy)
             cr.set_line_width(0.8)
             cr.stroke()
-            
-        cr.select_font_face("Purisa", cairo.FONT_SLANT_NORMAL, 
-            cairo.FONT_WEIGHT_NORMAL)
-        cr.set_font_size(13) 
+
+
         for i in range(6):
-            yy = y - space_below - ydiff*i + 5 
-            cr.move_to(1, yy)
+            yy = y - space_below - ydiff*i + 5
+            te = cr.text_extents(self.ytext[i])
+
+            cr.move_to(border_left-te[2]-2, yy)
             cr.show_text(self.ytext[i])
-            
+
         cr.set_font_size(15)
         te = cr.text_extents(self.text)
         cr.move_to((x-te[2])/2, y-5)
         cr.show_text(self.text)
-        
+
         graph_x_space = x - border_left - border_right
         graph_y_space = y - space_below - space_above
         bar_width = graph_x_space*0.75 / len(self.values)
         bar_distance = graph_x_space*0.25 / (1+len(self.values))
-       
+
         #set dummy max value to avoid exceptions
         if self.max_value == 0:
             self.max_value = 100
-            
         for i in range(len(self.values)):
             xx = border_left + (i+1)*bar_distance + i * bar_width
             yy = y-space_below
@@ -847,19 +851,19 @@ class GraphWidget(gtk.DrawingArea):
             cr.set_source_rgba(1, 1, 1, 0.75)
             cr.rectangle(int(xx), int(yy-height), int(bar_width), int(height))
             cr.fill()
-        
+
         cr.set_source_rgba(1, 1, 1, 1)
-        cr.select_font_face("Purisa", cairo.FONT_SLANT_NORMAL, 
+        cr.select_font_face("Purisa", cairo.FONT_SLANT_NORMAL,
                             cairo.FONT_WEIGHT_NORMAL)
-        cr.set_font_size(13) 
- 
+        cr.set_font_size(13)
+
         cr.rotate(2*math.pi * (-45) / 180)
         for i in range(len(self.values)):
             xx = y - space_below - 10
-            yy = border_left + (i+1)*bar_distance + i * bar_width 
-            cr.move_to(-xx, yy + bar_width*1.25 / 2) 
+            yy = border_left + (i+1)*bar_distance + i * bar_width
+            cr.move_to(-xx, yy + bar_width*1.25 / 2)
             cr.show_text(self.xtext[i])
-            
+
 class PedometerHomePlugin(hildondesktop.HomePluginItem):
     button = None
 
@@ -871,7 +875,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
     #second view ( day / week/ alltime)
     labelsT = {}
-    
+
     second_view_labels = ["All-time", "Today", "This week"]
 
     controller = None
@@ -892,7 +896,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         gobject.type_register(CustomEventBox)
         gobject.type_register(GraphWidget)
-        
+
         self.client = gconf.client_get_default()
         try:
             self.mode = self.client.get_int(MODE)
@@ -918,7 +922,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         self.controller.set_unit(self.unit)
         self.controller.set_second_view(self.second_view)
         self.controller.set_callback_ui(self.update_values)
-        
+
         self.graph_controller = GraphController()
         self.graph_controller.set_current_view(self.graph_view)
 
@@ -970,26 +974,26 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         eventBox.add(totalVBox)
         eventBox.connect("button-press-event", self.eventBox_clicked)
         eventBox.connect("button-release-event", self.eventBox_clicked_release)
-        
-        
+
+
         mainHBox.add(buttonVBox)
         mainHBox.add(descVBox)
         mainHBox.add(currentVBox)
         mainHBox.add(eventBox)
         self.mainhbox = mainHBox
-        
+
         graph = GraphWidget()
         self.graph_controller.set_graph(graph)
-        
+
         eventBoxGraph = CustomEventBox()
         eventBoxGraph.set_visible_window(False)
         eventBoxGraph.add(graph)
         self.graph = graph
         eventBoxGraph.connect("button-press-event", self.eventBoxGraph_clicked)
         eventBoxGraph.connect("button-release-event", self.eventBoxGraph_clicked_release)
-        
+
         self.mainvbox = gtk.VBox()
-        
+
         self.mainvbox.add(mainHBox)
         self.mainvbox.add(eventBoxGraph)
 
@@ -1000,26 +1004,26 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         self.connect("unrealize", self.close_requested)
         self.set_settings(True)
         self.connect("show-settings", self.show_settings)
-        
+
     def eventBoxGraph_clicked(self, widget, data=None):
         widget.set_state(gtk.STATE_ACTIVE)
-        
+
     def eventBoxGraph_clicked_release(self, widget, data=None):
         self.graph_view = self.graph_controller.next_view()
         self.client.set_int(GRAPHVIEW, self.graph_view)
-        
+
         widget.set_state(gtk.STATE_NORMAL)
 
     def eventBox_clicked(self, widget, data=None):
         widget.set_state(gtk.STATE_ACTIVE)
-        
+
     def eventBox_clicked_release(self, widget, data=None):
         widget.set_state(gtk.STATE_NORMAL)
-        
+
         self.second_view = (self.second_view + 1) % 3
         self.controller.set_second_view(self.second_view)
         self.client.set_int(SECONDVIEW, self.second_view)
-  
+
     def new_label_heading(self, title=""):
         l = gtk.Label(title)
         hildon.hildon_helper_set_logical_font(l, "SmallSystemFont")
