@@ -14,27 +14,42 @@
 #You should have received a copy of the GNU General Public License
 #along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import gtk
-import cairo
-import hildondesktop
-import gobject
 import os
 import time
-import hildon
-import gconf
+import pickle
+from datetime import date, timedelta
+from xml.dom.minidom import getDOMImplementation, parseString
 
-PATH="/apps/pedometerhomewidget"
-COUNTER=PATH+"/counter"
-TIMER=PATH+"/timer"
-MODE=PATH+"/mode"
-HEIGHT=PATH+"/height"
-UNIT=PATH+"/unit"
-ASPECT=PATH+"/aspect"
-LOGGING=PATH+"/logging"
+import gobject
+import gconf
+import gtk
+import cairo
+
+import hildondesktop
+import hildon
+
+PATH = "/apps/pedometerhomewidget"
+MODE = PATH + "/mode"
+HEIGHT = PATH + "/height"
+UNIT = PATH + "/unit"
+ASPECT = PATH + "/aspect"
+SECONDVIEW = PATH + "/secondview"
+GRAPHVIEW = PATH + "/graphview"
+LOGGING = PATH + "/logging"
 
 ICONSPATH = "/opt/pedometerhomewidget/"
 
-class PedoIntervalCounter:
+unit = 0
+
+class Singleton(object):
+    _instance = None
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            cls._instance = super(Singleton, cls).__new__(
+                                cls, *args, **kwargs)
+        return cls._instance
+
+class PedoIntervalCounter(Singleton):
     MIN_THRESHOLD = 500
     MIN_TIME_STEPS = 0.5
     x = []
@@ -44,22 +59,27 @@ class PedoIntervalCounter:
 
     #TODO: check if last detected step is at the end of the interval
 
-    def __init__(self, coords, tval):
+    def set_vals(self, coords, tval):
         self.x = coords[0]
         self.y = coords[1]
         self.z = coords[2]
         self.t = tval
 
-    def setThreshold(self, value):
-        self.MIN_THRESHOLD = value
-
-    def setTimeSteps(self, value):
-        self.MIN_TIME_STEPS = value
+    def set_mode(self, mode):
+        #runnig, higher threshold to prevent fake steps
+        self.mode = mode
+        if mode == 1:
+            self.MIN_THRESHOLD = 650
+            self.MIN_TIME_STEPS = 0.35
+        #walking
+        else:
+            self.MIN_THRESHOLD = 500
+            self.MIN_TIME_STEPS = 0.5
 
     def calc_mean(self, vals):
         sum = 0
         for i in vals:
-            sum+=i
+            sum += i
         if len(vals) > 0:
             return sum / len(vals)
         return 0
@@ -68,29 +88,28 @@ class PedoIntervalCounter:
         rez = 0
         mean = self.calc_mean(vals)
         for i in vals:
-            rez+=pow(abs(mean-i),2)
-        return math.sqrt(rez/len(vals))
+            rez += pow(abs(mean - i), 2)
+        return math.sqrt(rez / len(vals))
 
     def calc_threshold(self, vals):
         vmax = max(vals)
         vmin = min(vals)
         mean = self.calc_mean(vals)
-        threshold = max (abs(mean-vmax), abs(mean-vmin))
+        threshold = max (abs(mean - vmax), abs(mean - vmin))
         return threshold
 
     def count_steps(self, vals, t):
         threshold = self.MIN_THRESHOLD
         mean = self.calc_mean(vals)
         cnt = 0
-
-        i=0
+        i = 0
         while i < len(vals):
             if abs(vals[i] - mean) > threshold:
-                cnt+=1
-                ntime = t[i] + 0.5
+                cnt += 1
+                ntime = t[i] + self.MIN_TIME_STEPS
                 while i < len(vals) and t[i] < ntime:
-                    i+=1
-            i+=1
+                    i += 1
+            i += 1
         return cnt
 
     def get_best_values(self, x, y, z):
@@ -99,7 +118,7 @@ class PedoIntervalCounter:
         dev3 = self.calc_stdev(z)
         dev_max = max(dev1, dev2, dev3)
 
-        if ( abs(dev1 - dev_max ) < 0.001):
+        if (abs(dev1 - dev_max) < 0.001):
             logger.info("X chosen as best axis, stdev %f" % dev1)
             return x
         elif (abs(dev2 - dev_max) < 0.001):
@@ -113,48 +132,337 @@ class PedoIntervalCounter:
         vals = self.get_best_values(self.x, self.y, self.z)
         return self.count_steps(vals, self.t)
 
-class PedoCounter():
-    COORD_FNAME = "/sys/class/i2c-adapter/i2c-3/3-001d/coord"
-    COORD_FNAME_SDK = "/home/andrei/pedometer-widget-0.1/date.txt"
-    LOGFILE = "/home/user/log_pedometer"
-    COORD_GET_INTERVAL = 10
-    COUNT_INTERVAL = 5
+class PedoValues():
+    def __init__(self, time=0, steps=0, dist=0, calories=0):
+        self.time = time
+        self.steps = steps
+        self.calories = calories
+        self.dist = dist
+        self.unit = unit
+
+    def __add__(self, other):
+        return PedoValues(self.time + other.time,
+                          self.steps + other.steps,
+                          self.dist + other.dist,
+                          self.calories + other.calories)
+
+    def get_print_time(self):
+        tdelta = self.time
+        hours = int(tdelta / 3600)
+        tdelta -= 3600 * hours
+        mins = int(tdelta / 60)
+        tdelta -= 60 * mins
+        secs = int(tdelta)
+        strtime = "%.2d:%.2d:%.2d" % (hours, mins, secs)
+        return strtime
+
+    def get_print_distance(self):
+        if self.dist > 1000:
+            if self.unit == 0:
+                return "%.2f km" % (self.dist / 1000)
+            else:
+                return "%.2f mi" % (self.dist / 1609.344)
+        else:
+            if self.unit == 0:
+                return "%d m" % self.dist
+            else:
+                return "%d ft" % int(self.dist * 3.2808)
+            
+    def get_avg_speed(self):
+        conv = 0
+        if self.unit:
+            conv = 2.23693629
+        else:
+            conv = 3.6
+
+        if self.time == 0:
+            return 0
+        speed = 1.0 * self.dist / self.time
+        return speed * conv
+    
+    def get_print_avg_speed(self):
+        suffix = ""
+        conv = 0
+        if self.unit:
+            suffix = "mi/h"
+            conv = 2.23693629
+        else:
+            suffix = "km/h"
+            conv = 3.6
+
+        if self.time == 0:
+            return "N/A " + suffix
+        speed = 1.0 * self.dist / self.time
+        #convert from meters per second to km/h or mi/h
+        speed *= conv
+        return "%.2f %s" % (speed, suffix)
+
+    def get_print_steps(self):
+        return str(self.steps)
+
+    def get_print_calories(self):
+        return str(self.calories)
+
+class PedoRepository(Singleton):
+    values = {}
+
+    def load(self):
+        raise NotImplementedError("Must be implemented by subclass")
+
+    def save(self):
+        raise NotImplementedError("Must be implemented by subclass")
+
+    def reset_values(self):
+        self.values = {}
+        self.save()
+
+    def get_history_count(self):
+        """return the number of days in the log"""
+        return len(values)
+
+    def get_values(self):
+        return self.values
+
+    def add_values(self, values, when=date.today()):
+        """add PedoValues values to repository """
+        try:
+            self.values[when] = self.values[when] + values
+        except KeyError:
+            self.values[when] = values
+
+    def get_last_7_days(self):
+        ret = [] 
+        day = date.today()
+        for i in range(7):
+            try:
+                ret.append(self.values[day])
+            except KeyError:
+                ret.append(PedoValues())
+            day = day - timedelta(days=1)
+        return ret
+
+    def get_last_weeks(self):
+        delta = timedelta(days=1)
+        day = date.today()
+        week = int(date.today().strftime("%W"))
+        val = PedoValues()
+        ret = []
+        for i in range(56):
+            try:
+                val += self.values[day]
+            except KeyError:
+                pass
+            w = int(day.strftime("%W"))
+            if w != week:
+                ret.append(val)
+                val = PedoValues()
+                week = w
+                if len(ret) == 7:
+                    break
+            day -= delta
+        return ret
+
+    def get_alltime_values(self):
+        ret = PedoValues()
+        for k, v in self.values.iteritems():
+            ret = ret + v
+        return ret
+    
+    def get_today_values(self):
+        try:
+            return self.values[date.today()]
+        except KeyError:
+            return PedoValues()
+       
+    def get_this_week_values(self):
+        day = date.today()
+        ret = PedoValues()
+        while True: 
+            try:
+                ret += self.values[day]
+            except:
+                pass
+            if day.weekday() == 0:
+                break
+            day = day - timedelta(days=1)
+           
+        return ret 
+            
+class PedoRepositoryXML(PedoRepository):
+    DIR = os.path.join(os.path.expanduser("~"), ".pedometer")
+    FILE = os.path.join(DIR, "data.xml")
+    FILE2 = os.path.join(DIR, "pickle.log")
+    def __init__(self):
+        if not os.path.exists(self.DIR):
+            os.makedirs(self.DIR)
+        PedoRepository.__init__(self)
+
+    def load(self):
+        try:
+            f = open(self.FILE, "r")
+            dom = parseString(f.read())
+            values = dom.getElementsByTagName("pedometer")[0]
+            for v in values.getElementsByTagName("date"):
+                d = int(v.getAttribute("ordinal_day"))
+                steps = int(v.getAttribute("steps"))
+                calories = float(v.getAttribute("calories"))
+                dist = float(v.getAttribute("dist"))
+                time = float(v.getAttribute("time"))
+                day = date.fromordinal(d)
+                self.values[day] = PedoValues(time, steps, dist, calories)
+                    
+            f.close()
+        except Exception, e:
+            logger.error("Error while loading data from xml file: %s" % e)
+
+    def save(self):
+        try:
+            f = open(self.FILE, "w")
+
+            impl = getDOMImplementation()
+
+            newdoc = impl.createDocument(None, "pedometer", None)
+            top_element = newdoc.documentElement
+            for k, v in self.values.iteritems():
+                d = newdoc.createElement('date')
+                d.setAttribute("day", str(k.isoformat()))
+                d.setAttribute("ordinal_day", str(k.toordinal()))
+                d.setAttribute("steps", str(v.steps))
+                d.setAttribute("time", str(v.time))
+                d.setAttribute("dist", str(v.dist))
+                d.setAttribute("calories", str(v.calories))
+                top_element.appendChild(d)
+
+            newdoc.appendChild(top_element)
+            newdoc.writexml(f)
+            #f.write(newdoc.toprettyxml())
+            f.close()
+        except Exception, e:
+            logger.error("Error while saving data to xml file: %s" % e)
+
+     
+class PedoRepositoryPickle(PedoRepository):
+    DIR = os.path.join(os.path.expanduser("~"), ".pedometer")
+    FILE = os.path.join(DIR, "pickle.log")
+
+    def __init__(self):
+        if not os.path.exists(self.DIR):
+            os.makedirs(self.DIR)
+        PedoRepository.__init__(self)
+
+    def load(self):
+        try:
+            f = open(self.FILE, "rb")
+            self.values = pickle.load(f)
+            f.close()
+        except Exception, e:
+            logger.error("Error while loading pickle file: %s" % e)
+
+    def save(self):
+        try:
+            f = open(self.FILE, "wb")
+            pickle.dump(self.values, f)
+            f.close()
+        except Exception, e:
+            logger.error("Error while saving data to pickle: %s" % e)
+
+class PedoController(Singleton):
+    mode = 0
+    unit = 0
+    height_interval = 0
+    #what to display in second view - 0 - alltime, 1 - today, 2 - week
+    second_view = 0
+    callback_update_ui = None
 
     STEP_LENGTH = 0.7
+    #values for the two views in the widget ( current and day/week/alltime)
+    v = [PedoValues(), PedoValues()]
 
-    MIN_THRESHOLD = 500
-    MIN_TIME_STEPS = 0.5
+    startTime = 0
+    is_running = False
+    graph_controller = None
+    
+    def __init__(self):
+        self.pedometer = PedoCounter(self.steps_detected)
+        self.pedometerInterval = PedoIntervalCounter()
+        self.pedometerInterval.set_mode(self.mode)
+        self.repository = PedoRepositoryXML()
+        self.repository.load()
+        
+        self.graph_controller = GraphController()
+        self.load_values()
 
-    counter = 0
-    stop_requested = False
-    update_function = None
-    logging = False
-    isRunning = False
+    def load_values(self):
+        if self.second_view == 0:
+            self.v[1] = self.repository.get_alltime_values()
+        elif self.second_view == 1:
+            self.v[1] = self.repository.get_today_values()
+        else:
+            self.v[1] = self.repository.get_this_week_values()
 
-    mode = 0
+    def save_values(self):
+        self.repository.add_values(self.v[0])
+        self.repository.save()
+        self.load_values()
 
-    def __init__(self, update_function = None):
-        if not os.path.exists(self.COORD_FNAME):
-            self.COORD_FNAME = self.COORD_FNAME_SDK
+    def start_pedometer(self):
+        self.v[0] = PedoValues()
+        self.startTime = time.time()
+        self.is_running = True
+        self.pedometer.start()
+        self.notify_UI(True)
 
-        self.update_function = update_function
+    def stop_pedometer(self):
+        self.is_running = False
+        self.pedometer.request_stop()
+
+    def get_first(self):
+        return self.v[0]
+
+    def get_second(self):
+        if self.is_running:
+            return self.v[0] + self.v[1]
+        else:
+            return self.v[1]
+
+    def update_current(self):
+        """
+        Update distance and calories for current values based on new height, mode values
+        """
+        self.v[0].dist = self.get_distance(self.v[0].steps)
+        self.v[0].calories = self.get_calories(self.v[0].steps)
+
+    def steps_detected(self, cnt, last_steps=False):
+        self.v[0].steps += cnt
+        self.v[0].dist += self.get_distance(cnt)
+        self.v[0].calories += self.get_distance(cnt)
+        self.v[0].time = time.time() - self.startTime
+        if last_steps:
+            self.save_values()
+            self.notify_UI()
+        else:
+            self.notify_UI(True)
 
     def set_mode(self, mode):
-        #runnig, higher threshold to prevent fake steps
         self.mode = mode
-        if mode == 1:
-            self.MIN_THRESHOLD = 650
-            self.MIN_TIME_STEPS = 0.35
-        #walking
-        else:
-            self.MIN_THRESHOLD = 500
-            self.MIN_TIME_STEPS = 0.5
+        self.set_height(self.height_interval)
+        self.notify_UI()
 
-    def set_logging(self, value):
-        self.logging = value
+    def set_unit(self, new_unit):
+        self.unit = new_unit
+        unit = new_unit
 
-    #set height, will affect the distance
+    def set_second_view(self, second_view):
+        self.second_view = second_view
+        self.load_values()
+        self.notify_UI()
+
+    def set_callback_ui(self, func):
+        self.callback_update_ui = func
+
     def set_height(self, height_interval):
+        self.height_inteval = height_interval
+        #set height, will affect the distance
         if height_interval == 0:
             self.STEP_LENGTH = 0.59
         elif height_interval == 1:
@@ -168,6 +476,45 @@ class PedoCounter():
         #increase step length if RUNNING
         if self.mode == 1:
             self.STEP_LENGTH *= 1.45
+        self.notify_UI()
+
+    def get_distance(self, steps=None):
+        if steps == None:
+            steps = self.counter
+        return self.STEP_LENGTH * steps;
+
+    def get_calories(self, steps):
+        return steps
+
+    def notify_UI(self, optional=False):
+        if self.callback_update_ui is not None:
+            self.callback_update_ui()
+        self.graph_controller.update_ui(optional)
+        
+class PedoCounter(Singleton):
+    COORD_FNAME = "/sys/class/i2c-adapter/i2c-3/3-001d/coord"
+    COORD_FNAME_SDK = "/home/andrei/pedometer-widget-0.1/date.txt"
+    LOGFILE = "/home/user/log_pedometer"
+    #time in ms between two accelerometer data reads
+    COORD_GET_INTERVAL = 10
+
+    COUNT_INTERVAL = 5
+
+    interval_counter = None
+    stop_requested = False
+    update_function = None
+    logging = False
+    isRunning = False
+
+    def __init__(self, update_function=None):
+        if not os.path.exists(self.COORD_FNAME):
+            self.COORD_FNAME = self.COORD_FNAME_SDK
+            
+        self.interval_counter = PedoIntervalCounter()
+        self.update_function = update_function
+
+    def set_logging(self, value):
+        self.logging = value
 
     def get_rotation(self):
         f = open(self.COORD_FNAME, 'r')
@@ -175,15 +522,10 @@ class PedoCounter():
         f.close()
         return coords
 
-    def reset_counter(self):
-        counter = 0
-
-    def get_counter(self):
-        return counter
-
     def start(self):
         logger.info("Counter started")
         self.isRunning = True
+        self.stop_requested = False
         if self.logging:
             fname = "%d_%d_%d_%d_%d_%d" % time.localtime()[0:6]
             self.file = open(self.LOGFILE + fname + ".txt", "w")
@@ -197,31 +539,29 @@ class PedoCounter():
         return False
 
     def read_coords(self):
-        x,y,z = self.get_rotation()
+        x, y, z = self.get_rotation()
         self.coords[0].append(int(x))
         self.coords[1].append(int(y))
         self.coords[2].append(int(z))
-        now = time.time()-self.stime
+        now = time.time() - self.stime
         if self.logging:
-            self.file.write("%d %d %d %f\n" %(self.coords[0][-1], self.coords[1][-1], self.coords[2][-1], now))
+            self.file.write("%d %d %d %f\n" % (self.coords[0][-1], self.coords[1][-1], self.coords[2][-1], now))
 
         self.t.append(now)
         #call stop_interval
         ret = True
-        if self.t[-1] > 5 or self.stop_requested:
+        if self.t[-1] > self.COUNT_INTERVAL or self.stop_requested:
             ret = False
             gobject.idle_add(self.stop_interval)
         return ret
 
     def stop_interval(self):
-        pic = PedoIntervalCounter(self.coords, self.t)
-        cnt = pic.number_steps()
+        self.interval_counter.set_vals(self.coords, self.t)
+        cnt = self.interval_counter.number_steps()
 
         logger.info("Number of steps detected for last interval %d, number of coords: %d" % (cnt, len(self.t)))
 
-        self.counter += cnt
-        logger.info("Total number of steps : %d" % self.counter)
-        gobject.idle_add(self.update_function, self.counter, cnt)
+        gobject.idle_add(self.update_function, cnt, self.stop_requested)
 
         if self.stop_requested:
             gobject.idle_add(self.stop)
@@ -238,16 +578,11 @@ class PedoCounter():
         self.stop_requested = True
         self.isRunning = False
 
-    def get_distance(self, steps=None):
-        if steps == None:
-            steps = self.counter
-        return self.STEP_LENGTH * steps;
-
 class CustomButton(hildon.Button):
     def __init__(self, icon):
         hildon.Button.__init__(self, gtk.HILDON_SIZE_AUTO_WIDTH, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         self.icon = icon
-        self.set_size_request(int(32*1.4), int(30*1.0))
+        self.set_size_request(int(32 * 1.4), int(30 * 1.0))
         self.retval = self.connect("expose_event", self.expose)
 
     def set_icon(self, icon):
@@ -268,7 +603,7 @@ class CustomButton(hildon.Button):
         if self.state == gtk.STATE_ACTIVE:
             style = self.rc_get_style()
             color = style.lookup_color("SelectionColor")
-            self.context.set_source_rgba (color.red/65535.0, color.green/65335.0, color.blue/65535.0, 0.75);
+            self.context.set_source_rgba (color.red / 65535.0, color.green / 65335.0, color.blue / 65535.0, 0.75);
         self.context.fill()
 
         #img = cairo.ImageSurface.create_from_png(self.icon)
@@ -278,74 +613,322 @@ class CustomButton(hildon.Button):
         img = gtk.Image()
         img.set_from_file(self.icon)
         buf = img.get_pixbuf()
-        buf =  buf.scale_simple(int(32 * 1.5), int(30 * 1.5), gtk.gdk.INTERP_BILINEAR)
+        buf = buf.scale_simple(int(32 * 1.5), int(30 * 1.5), gtk.gdk.INTERP_BILINEAR)
 
-        self.context.set_source_pixbuf(buf, rect.x+(event.area.width/2-15)-8, rect.y+1)
-        self.context.scale(200,200)
+        self.context.set_source_pixbuf(buf, rect.x + (event.area.width / 2 - 15) - 8, rect.y + 1)
+        self.context.scale(200, 200)
         self.context.paint()
 
         return self.retval
 
+class CustomEventBox(gtk.EventBox):
+   
+    def __init__(self):
+        gtk.EventBox.__init__(self)
+    
+    def do_expose_event(self, event):
+        self.context = self.window.cairo_create()
+        self.context.rectangle(event.area.x, event.area.y,
+                            event.area.width, event.area.height)
+
+        self.context.clip()
+        rect = self.get_allocation()
+        self.context.rectangle(rect.x, rect.y, rect.width, rect.height)
+
+        if self.state == gtk.STATE_ACTIVE:
+            style = self.rc_get_style()
+            color = style.lookup_color("SelectionColor")
+            self.context.set_source_rgba (color.red / 65535.0, color.green / 65335.0, color.blue / 65535.0, 0.75);
+        else:
+            self.context.set_source_rgba(1, 1, 1, 0)
+        self.context.fill()
+
+        gtk.EventBox.do_expose_event(self, event)
+
+class GraphController(Singleton):
+    ytitles = ["Steps", "Average Speed", "Distance", "Calories"]
+    xtitles = ["Day", "Week"] # "Today"]
+    widget = None
+    def __init__(self):
+        self.repository = PedoRepositoryXML()
+        self.last_update = 0
+      
+    def set_graph(self, widget):
+        self.widget = widget 
+        self.update_ui()
+        
+    def set_current_view(self, view):
+        """
+        current_view % len(ytitles) - gives the ytitle
+        current_view / len(ytitles) - gives the xtitle
+        """ 
+        self.current_view = view 
+
+        if self.current_view == len(self.ytitles) * len(self.xtitles):
+            self.current_view = 0
+        self.x_id = self.current_view / len(self.ytitles)
+        self.y_id = self.current_view % len(self.ytitles)
+        
+    def next_view(self):
+        self.set_current_view(self.current_view+1)
+        self.update_ui()
+        return self.current_view
+    
+    def last_weeks_labels(self):
+        d = date.today()
+        delta = timedelta(days=7)
+        ret = []
+        for i in range(7):
+            ret.append(d.strftime("Week %W"))
+            d = d - delta
+        return ret
+    
+    def compute_values(self):
+        labels = []
+        if self.x_id == 0:
+            values = self.repository.get_last_7_days()
+            d = date.today()
+            delta = timedelta(days=1)
+            for i in range(7):
+                labels.append(d.ctime().split()[0])
+                d = d - delta
+            
+        elif self.x_id == 1:
+            values = self.repository.get_last_weeks()
+            d = date.today()
+            for i in range(7):
+                labels.append(d.strftime("Week %W"))
+                d = d - timedelta(days=7) 
+        else:
+            values = self.repository.get_today() 
+            #TODO get labels
+       
+        if self.y_id == 0:
+            yvalues = [line.steps for line in values]
+        elif self.y_id == 1:
+            yvalues = [line.get_avg_speed() for line in values]
+        elif self.y_id == 2:
+            yvalues = [line.dist for line in values]
+        else:
+            yvalues = [line.calories for line in values]
+            
+        #determine values for y lines in graph
+        diff = self.get_best_interval_value(max(yvalues))
+        ytext = []
+        for i in range(6):
+            s = str(int(i*diff))
+            while len(s) < 5:
+                s = ' ' + s
+            ytext.append(s)
+            
+        if self.widget is not None:
+            yvalues.reverse()
+            labels.reverse()
+            self.widget.values = yvalues
+            self.widget.ytext = ytext
+            self.widget.xtext = labels
+            self.widget.max_value = diff * 5 
+            self.widget.text = self.xtitles[self.x_id] + " / " + self.ytitles[self.y_id]
+            self.widget.queue_draw()
+        else:
+            logger.error("Widget not set in GraphController")
+        
+    def get_best_interval_value(self, max_value):
+        diff =  1.0 * max_value / 5
+        l = len(str(int(diff)))
+        d = math.pow(10, l/2)
+        val = int(math.ceil(1.0 * diff / d)) * d
+        if val == 0:
+            val = 1
+        return val
+        
+    def update_ui(self, optional=False):
+        """update graph values every x seconds"""
+        if optional and self.last_update - time.time() < 600:
+            return
+        if self.widget is None:
+            return
+        
+        print "update_ui"
+        self.compute_values()
+        self.last_update = time.time()
+        
+class GraphWidget(gtk.DrawingArea):
+    
+    def __init__(self):
+        gtk.DrawingArea.__init__(self)
+        self.set_size_request(-1, 150)
+        self.yvalues = 5
+        self.ytext = ["   0", "1000", "2000", "3000", "4000", "5000"]
+        self.xtext = ["Monday", "Tuesday", "Wednesday","Thursday", "Friday", "Saturday", "Sunday"]
+        self.values = [1500, 3400, 4000, 3600, 3200, 0, 4500]
+        self.max_value = 5000
+        self.text = "All time steps"
+        
+    def do_expose_event(self, event):
+        context = self.window.cairo_create()
+        
+        # set a clip region for the expose event
+        context.rectangle(event.area.x, event.area.y,
+                               event.area.width, event.area.height)
+        context.clip()
+        
+        context.save()
+        
+        context.set_operator(cairo.OPERATOR_SOURCE)
+        style = self.rc_get_style()
+       
+        if self.state == gtk.STATE_ACTIVE:
+            color = style.lookup_color("SelectionColor")
+        else:
+             color = style.lookup_color("DefaultBackgroundColor")
+        context.set_source_rgba (color.red / 65535.0, color.green / 65335.0, color.blue / 65535.0, 0.75)
+
+        context.paint()
+        context.restore();
+        self.draw(context)
+        
+    def draw(self, cr):
+        print self.max_value
+        space_below = 20 
+        space_above = 10
+        border_right = 10
+        border_left = 30
+        rect = self.get_allocation()
+        x = rect.width
+        y = rect.height
+        
+        cr.set_source_rgb(1, 1, 1)
+        cr.move_to(border_left, space_above)
+        cr.line_to(border_left, y-space_below)
+        cr.set_line_width(2)
+        cr.stroke() 
+        
+        cr.move_to(border_left, y-space_below)
+        cr.line_to(x-border_right, y-space_below)
+        cr.set_line_width(2)
+        cr.stroke() 
+       
+        ydiff = (y-space_above-space_below) / self.yvalues 
+        for i in range(self.yvalues):
+            yy = y-space_below-ydiff*(i+1)
+            cr.move_to(border_left, yy)
+            cr.line_to(x-border_right, yy)
+            cr.set_line_width(0.8)
+            cr.stroke()
+            
+        cr.select_font_face("Purisa", cairo.FONT_SLANT_NORMAL, 
+            cairo.FONT_WEIGHT_NORMAL)
+        cr.set_font_size(13) 
+        for i in range(6):
+            yy = y - space_below - ydiff*i + 5 
+            cr.move_to(1, yy)
+            cr.show_text(self.ytext[i])
+            
+        cr.set_font_size(15)
+        cr.move_to(x/3, y-5)
+        cr.show_text(self.text)
+        
+        graph_x_space = x - border_left - border_right
+        graph_y_space = y - space_below - space_above
+        bar_width = graph_x_space*0.75 / len(self.values)
+        bar_distance = graph_x_space*0.25 / (1+len(self.values))
+       
+        #set dummy max value to avoid exceptions
+        if self.max_value == 0:
+            self.max_value = 100
+            
+        for i in range(len(self.values)):
+            xx = border_left + (i+1)*bar_distance + i * bar_width
+            yy = y-space_below
+            height = graph_y_space * (1.0 * self.values[i] / self.max_value)
+            cr.set_source_rgba(1, 1, 1, 0.75)
+            cr.rectangle(int(xx), int(yy-height), int(bar_width), int(height))
+            cr.fill()
+        
+        cr.set_source_rgba(1, 1, 1, 1)
+        cr.select_font_face("Purisa", cairo.FONT_SLANT_NORMAL, 
+                            cairo.FONT_WEIGHT_NORMAL)
+        cr.set_font_size(13) 
+ 
+        cr.rotate(2*math.pi * (-45) / 180)
+        for i in range(len(self.values)):
+            xx = y - space_below - 10
+            yy = border_left + (i+1)*bar_distance + i * bar_width 
+            cr.move_to(-xx, yy + bar_width*1.25 / 2) 
+            cr.show_text(self.xtext[i])
+            
 class PedometerHomePlugin(hildondesktop.HomePluginItem):
     button = None
 
-    #labels for current steps
-    labels = ["timer", "count", "dist", "avgSpeed"]
-    #labelsC = { "timer" : None, "count" : None, "dist" : None, "avgSpeed" : None }
+    #labels to display
+    labels = ["timer", "count", "dist", "avgSpeed", "calories"]
 
-    #labels for all time steps
-    #labelsT = { "timer" : None, "count" : None, "dist" : None, "avgSpeed" : None }
+    #current view
     labelsC = {}
-    labelsT = {}
 
+    #second view ( day / week/ alltime)
+    labelsT = {}
+    
+    second_view_labels = ["All-time", "Today", "This week"]
+
+    controller = None
     pedometer = None
+    pedometerInterval = None
+    graph_controller = None
     startTime = None
 
-    totalCounter = 0
-    totalTime = 0
     mode = 0
     height = 0
     unit = 0
-
-    counter = 0
-    time = 0
     aspect = 0
+    second_view = 0
     logging = False
 
     def __init__(self):
         hildondesktop.HomePluginItem.__init__(self)
 
+        gobject.type_register(CustomEventBox)
+        gobject.type_register(GraphWidget)
+        
         self.client = gconf.client_get_default()
         try:
-            self.totalCounter = self.client.get_int(COUNTER)
-            self.totalTime = self.client.get_int(TIMER)
             self.mode = self.client.get_int(MODE)
             self.height = self.client.get_int(HEIGHT)
             self.unit = self.client.get_int(UNIT)
             self.aspect = self.client.get_int(ASPECT)
+            self.second_view = self.client.get_int(SECONDVIEW)
+            self.graph_view = self.client.get_int(GRAPHVIEW)
             self.logging = self.client.get_bool(LOGGING)
+
         except:
-            self.client.set_int(COUNTER, 0)
-            self.client.set_int(TIMER, 0)
             self.client.set_int(MODE, 0)
             self.client.set_int(HEIGHT, 0)
             self.client.set_int(UNIT, 0)
             self.client.set_int(ASPECT, 0)
+            self.client.set_int(SECONDVIEW, 0)
+            self.client.set_int(GRAPHVIEW, 0)
             self.client.set_bool(LOGGING, False)
 
-        self.pedometer = PedoCounter(self.update_values)
-        self.pedometer.set_mode(self.mode)
-        self.pedometer.set_height(self.height)
+        self.controller = PedoController()
+        self.controller.set_height(self.height)
+        self.controller.set_mode(self.mode)
+        self.controller.set_unit(self.unit)
+        self.controller.set_second_view(self.second_view)
+        self.controller.set_callback_ui(self.update_values)
+        
+        self.graph_controller = GraphController()
+        self.graph_controller.set_current_view(self.graph_view)
 
-        #self.button = gtk.Button("Start")
         self.button = CustomButton(ICONSPATH + "play.png")
         self.button.connect("clicked", self.button_clicked)
 
         self.create_labels(self.labelsC)
         self.create_labels(self.labelsT)
+        self.label_second_view = self.new_label_heading(self.second_view_labels[self.second_view])
 
-        self.update_ui_values(self.labelsC, 0, 0)
-        self.update_ui_values(self.labelsT, self.totalTime, self.totalCounter)
+        self.update_current()
+        self.update_total()
 
         mainHBox = gtk.HBox(spacing=1)
 
@@ -353,6 +936,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         descVBox.add(self.new_label_heading())
         descVBox.add(self.new_label_heading("Time:"))
         descVBox.add(self.new_label_heading("Steps:"))
+        descVBox.add(self.new_label_heading("Calories:"))
         descVBox.add(self.new_label_heading("Distance:"))
         descVBox.add(self.new_label_heading("Avg Speed:"))
 
@@ -360,14 +944,16 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         currentVBox.add(self.new_label_heading("Current"))
         currentVBox.add(self.labelsC["timer"])
         currentVBox.add(self.labelsC["count"])
+        currentVBox.add(self.labelsC["calories"])
         currentVBox.add(self.labelsC["dist"])
         currentVBox.add(self.labelsC["avgSpeed"])
         self.currentBox = currentVBox
 
         totalVBox = gtk.VBox(spacing=1)
-        totalVBox.add(self.new_label_heading("Total"))
+        totalVBox.add(self.label_second_view)
         totalVBox.add(self.labelsT["timer"])
         totalVBox.add(self.labelsT["count"])
+        totalVBox.add(self.labelsT["calories"])
         totalVBox.add(self.labelsT["dist"])
         totalVBox.add(self.labelsT["avgSpeed"])
         self.totalBox = totalVBox
@@ -377,21 +963,61 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         buttonVBox.add(self.button)
         buttonVBox.add(self.new_label_heading(""))
 
+        eventBox = CustomEventBox()
+        eventBox.set_visible_window(False)
+        eventBox.add(totalVBox)
+        eventBox.connect("button-press-event", self.eventBox_clicked)
+        eventBox.connect("button-release-event", self.eventBox_clicked_release)
+        
+        
         mainHBox.add(buttonVBox)
         mainHBox.add(descVBox)
         mainHBox.add(currentVBox)
-        mainHBox.add(totalVBox)
-
+        mainHBox.add(eventBox)
         self.mainhbox = mainHBox
+        
+        graph = GraphWidget()
+        self.graph_controller.set_graph(graph)
+        
+        eventBoxGraph = CustomEventBox()
+        eventBoxGraph.set_visible_window(False)
+        eventBoxGraph.add(graph)
+        self.graph = graph
+        eventBoxGraph.connect("button-press-event", self.eventBoxGraph_clicked)
+        eventBoxGraph.connect("button-release-event", self.eventBoxGraph_clicked_release)
+        
+        self.mainvbox = gtk.VBox()
+        
+        self.mainvbox.add(mainHBox)
+        self.mainvbox.add(eventBoxGraph)
 
-        mainHBox.show_all()
-        self.add(mainHBox)
+        self.mainvbox.show_all()
+        self.add(self.mainvbox)
         self.update_aspect()
 
         self.connect("unrealize", self.close_requested)
         self.set_settings(True)
         self.connect("show-settings", self.show_settings)
+        
+    def eventBoxGraph_clicked(self, widget, data=None):
+        widget.set_state(gtk.STATE_ACTIVE)
+        
+    def eventBoxGraph_clicked_release(self, widget, data=None):
+        self.graph_view = self.graph_controller.next_view()
+        self.client.set_int(GRAPHVIEW, self.graph_view)
+        
+        widget.set_state(gtk.STATE_NORMAL)
 
+    def eventBox_clicked(self, widget, data=None):
+        widget.set_state(gtk.STATE_ACTIVE)
+        
+    def eventBox_clicked_release(self, widget, data=None):
+        widget.set_state(gtk.STATE_NORMAL)
+        
+        self.second_view = (self.second_view + 1) % 3
+        self.controller.set_second_view(self.second_view)
+        self.client.set_int(SECONDVIEW, self.second_view)
+  
     def new_label_heading(self, title=""):
         l = gtk.Label(title)
         hildon.hildon_helper_set_logical_font(l, "SmallSystemFont")
@@ -415,87 +1041,41 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             self.currentBox.hide_all()
             self.totalBox.show_all()
 
-    def update_ui_values(self, labels, timer, steps):
-        def get_str_distance(meters):
-            if meters > 1000:
-                if self.unit == 0:
-                    return "%.2f km" % (meters/1000)
-                else:
-                    return "%.2f mi" % (meters/1609.344)
-            else:
-                if self.unit == 0:
-                    return "%d m" % meters
-                else:
-                    return "%d ft" % int(meters*3.2808)
-
-        def get_avg_speed(timer, dist):
-            suffix = ""
-            conv = 0
-            if self.unit:
-                suffix = "mi/h"
-                conv = 2.23693629
-            else:
-                suffix = "km/h"
-                conv = 3.6
-
-            if timer == 0:
-                return "N/A " + suffix
-            speed = 1.0 *dist / timer
-            #convert from meters per second to km/h or mi/h
-            speed *= conv
-            return "%.2f %s" % (speed, suffix)
-
-        tdelta = timer
-        hours = int(tdelta / 3600)
-        tdelta -= 3600 * hours
-        mins = int(tdelta / 60)
-        tdelta -= 60 * mins
-        secs = int(tdelta)
-
-        strtime = "%.2d:%.2d:%.2d" % ( hours, mins, secs)
-
-        labels["timer"].set_label(strtime)
-        labels["count"].set_label(str(steps))
-
-        dist = self.pedometer.get_distance(steps)
-
-        labels["dist"].set_label(get_str_distance(dist))
-        labels["avgSpeed"].set_label(get_avg_speed(timer, dist))
+    def update_ui_values(self, labels, values):
+        labels["timer"].set_label(values.get_print_time())
+        labels["count"].set_label(values.get_print_steps())
+        labels["dist"].set_label(values.get_print_distance())
+        labels["avgSpeed"].set_label(values.get_print_avg_speed())
+        labels["calories"].set_label(values.get_print_calories())
 
     def update_current(self):
-        self.update_ui_values(self.labelsC, self.time, self.counter)
+        self.update_ui_values(self.labelsC, self.controller.get_first())
 
     def update_total(self):
-        self.update_ui_values(self.labelsT, self.totalTime, self.totalCounter)
+        self.update_ui_values(self.labelsT, self.controller.get_second())
 
     def show_settings(self, widget):
         def reset_total_counter(arg):
             widget.totalCounter = 0
             widget.totalTime = 0
             widget.update_total()
-            hildon.hildon_banner_show_information(self,"None", "Total counter was resetted")
+            hildon.hildon_banner_show_information(self, "None", "Total counter was resetted")
 
         def selector_changed(selector, data):
             widget.mode = selector.get_active(0)
             widget.client.set_int(MODE, widget.mode)
-            widget.pedometer.set_mode(widget.mode)
-            widget.pedometer.set_height(widget.height)
-            widget.update_current()
-            widget.update_total()
+            widget.controller.set_mode(widget.mode)
 
         def selectorH_changed(selector, data):
             widget.height = selectorH.get_active(0)
             widget.client.set_int(HEIGHT, widget.height)
-            widget.pedometer.set_height(widget.height)
-            widget.update_current()
-            widget.update_total()
+            widget.controller.set_height(widget.height)
 
 
         def selectorUnit_changed(selector, data):
             widget.unit = selectorUnit.get_active(0)
             widget.client.set_int(UNIT, widget.unit)
-            widget.update_current()
-            widget.update_total()
+            widget.controller.set_unit(widget.unit)
 
         def selectorUI_changed(selector, data):
             widget.aspect = selectorUI.get_active(0)
@@ -521,7 +1101,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         selector.append_text("Run")
         selector.connect("changed", selector_changed)
 
-        modePicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        modePicker = hildon.ButtonPickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         modePicker.set_alignment(0.0, 0.5, 1.0, 1.0)
         modePicker.set_title("Select mode")
         modePicker.set_selector(selector)
@@ -597,39 +1177,18 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         self.pedometer.request_stop()
 
-    def update_values(self, totalCurent, lastInterval):
-        self.totalCounter += lastInterval
-        self.counter = totalCurent
-
-        tdelta = time.time() - self.time - self.startTime
-        self.time += tdelta
-        self.totalTime += tdelta
-
+    def update_values(self):
+        #TODO: do not update if the widget is not on the active desktop
+        self.label_second_view.set_label(self.second_view_labels[self.second_view])
         self.update_current()
         self.update_total()
 
     def button_clicked(self, button):
-        if self.pedometer is not None and self.pedometer.isRunning:
-            #counter is running
-            self.pedometer.request_stop()
-            self.client.set_int(COUNTER, self.totalCounter)
-            self.client.set_int(TIMER, int(self.totalTime))
-            #self.button.set_label("Start")
+        if self.controller.is_running:
+            self.controller.stop_pedometer()
             self.button.set_icon(ICONSPATH + "play.png")
         else:
-            self.pedometer = PedoCounter(self.update_values)
-            self.pedometer.set_mode(self.mode)
-            self.pedometer.set_height(self.height)
-            self.pedometer.set_logging(self.logging)
-
-            self.time = 0
-            self.counter = 0
-
-            self.update_current()
-
-            self.pedometer.start()
-            self.startTime = time.time()
-            #self.button.set_label("Stop")
+            self.controller.start_pedometer()
             self.button.set_icon(ICONSPATH + "stop.png")
 
     def do_expose_event(self, event):
@@ -639,7 +1198,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         #cr.set_source_rgba(0.4, 0.64, 0.564, 0.5)
         style = self.rc_get_style()
         color = style.lookup_color("DefaultBackgroundColor")
-        cr.set_source_rgba (color.red/65535.0, color.green/65335.0, color.blue/65535.0, 0.75);
+        cr.set_source_rgba (color.red / 65535.0, color.green / 65335.0, color.blue / 65535.0, 0.75);
 
         radius = 5
         width = self.allocation.width
@@ -648,7 +1207,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         x = self.allocation.x
         y = self.allocation.y
 
-        cr.move_to(x+radius, y)
+        cr.move_to(x + radius, y)
         cr.line_to(x + width - radius, y)
         cr.curve_to(x + width - radius, y, x + width, y, x + width, y + radius)
         cr.line_to(x + width, y + height - radius)
@@ -662,7 +1221,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         cr.fill_preserve()
 
         color = style.lookup_color("ActiveTextColor")
-        cr.set_source_rgba (color.red/65535.0, color.green/65335.0, color.blue/65535.0, 0.5);
+        cr.set_source_rgba (color.red / 65535.0, color.green / 65335.0, color.blue / 65535.0, 0.5);
         cr.set_line_width(1)
         cr.stroke()
 
