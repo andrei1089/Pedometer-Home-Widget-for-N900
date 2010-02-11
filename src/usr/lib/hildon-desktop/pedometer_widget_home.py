@@ -1148,6 +1148,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         self.graph = graph
         eventBoxGraph.connect("button-press-event", self.eventBoxGraph_clicked)
         eventBoxGraph.connect("button-release-event", self.eventBoxGraph_clicked_release)
+        self.graphBox = eventBoxGraph
 
         self.mainvbox = gtk.VBox()
 
@@ -1194,15 +1195,24 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             new_labels[label] = l
 
     def update_aspect(self):
-        if self.aspect == 0:
+
+        if self.aspect > 0:
+            self.graphBox.hide_all()
+        else:
+            self.graphBox.show_all()
+
+        if self.aspect == 0 or self.aspect == 1:
             self.currentBox.show_all()
             self.totalBox.show_all()
-        elif self.aspect == 1:
+        elif self.aspect == 2:
             self.currentBox.show_all()
             self.totalBox.hide_all()
         else:
             self.currentBox.hide_all()
             self.totalBox.show_all()
+
+        x,y = self.size_request()
+        self.resize(x,y)
 
     def update_ui_values(self, labels, values):
         labels["timer"].set_label(values.get_print_time())
@@ -1412,6 +1422,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         selectorUI = hildon.TouchSelector(text=True)
         selectorUI = hildon.TouchSelector(text=True)
         selectorUI.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
+        selectorUI.append_text("Show current + total + graph")
         selectorUI.append_text("Show current + total")
         selectorUI.append_text("Show only current")
         selectorUI.append_text("Show only total")
