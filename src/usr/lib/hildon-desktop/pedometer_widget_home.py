@@ -1512,16 +1512,6 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
 hd_plugin_type = PedometerHomePlugin
 
-# The code below is just for testing purposes.
-# It allows to run the widget as a standalone process.
-if __name__ == "__main__":
-    import gobject
-    gobject.type_register(hd_plugin_type)
-    obj = gobject.new(hd_plugin_type, plugin_id="plugin_id")
-    obj.show_all()
-    gtk.main()
-
-############### old pedometer.py ###
 import math
 import logging
 
@@ -1533,3 +1523,11 @@ formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(messag
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
+# The code below is just for testing purposes.
+# It allows to run the widget as a standalone process.
+if __name__ == "__main__":
+    import gobject
+    gobject.type_register(hd_plugin_type)
+    obj = gobject.new(hd_plugin_type, plugin_id="plugin_id")
+    obj.show_all()
+    gtk.main()
