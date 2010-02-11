@@ -749,7 +749,6 @@ class GraphController(Singleton):
         if self.widget is None:
             return
         
-        print "update_ui"
         self.compute_values()
         self.last_update = time.time()
         
@@ -759,6 +758,8 @@ class GraphWidget(gtk.DrawingArea):
         gtk.DrawingArea.__init__(self)
         self.set_size_request(-1, 150)
         self.yvalues = 5
+        
+        """sample values"""
         self.ytext = ["   0", "1000", "2000", "3000", "4000", "5000"]
         self.xtext = ["Monday", "Tuesday", "Wednesday","Thursday", "Friday", "Saturday", "Sunday"]
         self.values = [1500, 3400, 4000, 3600, 3200, 0, 4500]
@@ -789,11 +790,11 @@ class GraphWidget(gtk.DrawingArea):
         self.draw(context)
         
     def draw(self, cr):
-        print self.max_value
         space_below = 20 
         space_above = 10
         border_right = 10
         border_left = 30
+        
         rect = self.get_allocation()
         x = rect.width
         y = rect.height
@@ -826,7 +827,8 @@ class GraphWidget(gtk.DrawingArea):
             cr.show_text(self.ytext[i])
             
         cr.set_font_size(15)
-        cr.move_to(x/3, y-5)
+        te = cr.text_extents(self.text)
+        cr.move_to((x-te[2])/2, y-5)
         cr.show_text(self.text)
         
         graph_x_space = x - border_left - border_right
