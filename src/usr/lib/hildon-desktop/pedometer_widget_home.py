@@ -38,6 +38,12 @@ GRAPHVIEW = PATH + "/graphview"
 NOIDLETIME = PATH + "/noidletime"
 LOGGING = PATH + "/logging"
 
+ALARM_PATH = PATH + "/alarm"
+ALARM_ENABLE = ALARM_PATH + "/enable"
+ALARM_FNAME = ALARM_PATH + "/fname"
+ALARM_TYPE = ALARM_PATH + "/type"
+ALARM_INTERVAL = ALARM_PATH + "/interval"
+
 ICONSPATH = "/opt/pedometerhomewidget/"
 
 unit = 0
@@ -341,7 +347,6 @@ class PedoRepositoryXML(PedoRepository):
         except Exception, e:
             logger.error("Error while saving data to xml file: %s" % e)
 
-
 class PedoRepositoryPickle(PedoRepository):
     DIR = os.path.join(os.path.expanduser("~"), ".pedometer")
     FILE = os.path.join(DIR, "pickle.log")
@@ -366,6 +371,61 @@ class PedoRepositoryPickle(PedoRepository):
             f.close()
         except Exception, e:
             logger.error("Error while saving data to pickle: %s" % e)
+
+class AlarmController(Singleton):
+    enable = False
+    fname = "/home/user/MyDocs/.sounds/Ringtones/Bicycle.aac"
+    interval = 5
+    type = 0
+
+    def __init__(self):
+        self.client = gconf.client_get_default()
+        try:
+            self.enable = self.client.get_bool(ALARM_ENABLE)
+            self.fname = self.client.get_string(ALARM_FNAME)
+            self.interval = self.client.get_int(ALARM_INTERVAL)
+            self.type = self.client.get_int(ALARM_TYPE)
+        except:
+            self.client.set_bool(ALARM_ENABLE, self.enable)
+            self.client.set_string(ALARM_FNAME, self.fname)
+            self.client.set_int(ALARM_INTERVAL, self.interval)
+            self.client.set_int(ALARM_TYPE, self.type)
+
+    def update(self):
+        pass
+
+    def play(self):
+        pass
+
+    def set_enable(self, value):
+       self.enable = value
+       self.client.set_bool(ALARM_ENABLE, value)
+
+    def get_enable(self):
+        return self.enable
+
+    def set_alarm_file(self, fname):
+        self.fname = fname
+        self.client.set_string(ALARM_FNAME, fname)
+
+    def get_alarm_file(self):
+        if self.fname == None:
+            return ""
+        return self.fname
+
+    def set_interval(self, interval):
+        self.interval = interval
+        self.client.set_int(ALARM_INTERVAL, interval)
+
+    def get_interval(self):
+        return self.interval
+
+    def set_type(self, type):
+        self.type = type
+        self.client.set_int(ALARM_TYPE, type)
+
+    def get_type(self):
+        return self.type
 
 class PedoController(Singleton):
     mode = 0
@@ -939,6 +999,8 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         self.graph_controller = GraphController()
         self.graph_controller.set_current_view(self.graph_view)
 
+        self.alarm_controller = AlarmController()
+
         self.button = CustomButton(ICONSPATH + "play.png")
         self.button.connect("clicked", self.button_clicked)
 
@@ -1073,12 +1135,109 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
     def update_total(self):
         self.update_ui_values(self.labelsT, self.controller.get_second())
 
+    def show_alarm_settings(self, main_button):
+        def choose_file(widget):
+            file = hildon.FileChooserDialog(self, gtk.FILE_CHOOSER_ACTION_OPEN, hildon.FileSystemModel() )
+            file.show()
+            if ( file.run() == gtk.RESPONSE_OK):
+                fname = file.get_filename()
+                widget.set_value(fname)
+                self.alarm_controller.set_alarm_file(fname)
+            file.destroy()
+
+        def test_sound(button):
+            try:
+                self.alarm_controller.play()
+            except Exception, e:
+                logger.error("Could not play alarm sound: %s" % e)
+                hildon.hildon_banner_show_information(self, "None", "Could not play alarm sound")
+
+        def enableButton_changed(button):
+            value = button.get_active()
+            self.alarm_controller.set_enable(value)
+            if value:
+                main_button.set_value("Enabled")
+            else:
+                main_button.set_value("Disabled")
+
+        def selectorType_changed(selector, data, labelEntry2):
+            self.alarm_controller.set_type(selector.get_active(0))
+            labelEntry2.set_label(suffix[self.alarm_controller.get_type()])
+
+        dialog = gtk.Dialog()
+        dialog.set_title("Alarm settings")
+        dialog.add_button("OK", gtk.RESPONSE_OK)
+
+        enableButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
+        enableButton.set_label("Enable alarm")
+        enableButton.set_active(self.alarm_controller.get_enable())
+        enableButton.connect("toggled", enableButton_changed)
+
+        testButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        testButton.set_alignment(0, 0.8, 1, 1)
+        testButton.set_title("Test sound")
+        testButton.connect("pressed", test_sound)
+
+        fileButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        fileButton.set_alignment(0, 0.8, 1, 1)
+        fileButton.set_title("Alarm sound")
+        fileButton.set_value(self.alarm_controller.get_alarm_file())
+        fileButton.connect("pressed", choose_file)
+
+        labelEntry = gtk.Label("Notify every:")
+        suffix = ["mins", "steps", "m/ft", "calories"]
+        labelEntry2 = gtk.Label(suffix[self.alarm_controller.get_type()])
+        intervalEntry = hildon.Entry(gtk.HILDON_SIZE_AUTO_WIDTH)
+        intervalEntry.set_text(str(self.alarm_controller.get_interval()))
+
+        selectorType = hildon.TouchSelector(text=True)
+        selectorType.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
+        selectorType.append_text("Time")
+        selectorType.append_text("Steps")
+        selectorType.append_text("Distance")
+        selectorType.append_text("Calories")
+        selectorType.connect("changed", selectorType_changed, labelEntry2)
+
+        typePicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        typePicker.set_alignment(0.0, 0.5, 1.0, 1.0)
+        typePicker.set_title("Alarm type")
+        typePicker.set_selector(selectorType)
+        typePicker.set_active(self.alarm_controller.get_type())
+
+
+
+        hbox = gtk.HBox()
+        hbox.add(labelEntry)
+        hbox.add(intervalEntry)
+        hbox.add(labelEntry2)
+
+        dialog.vbox.add(enableButton)
+        dialog.vbox.add(fileButton)
+        dialog.vbox.add(typePicker)
+        dialog.vbox.add(hbox)
+        dialog.show_all()
+        while 1:
+            response = dialog.run()
+            if response != gtk.RESPONSE_OK:
+                break
+            try:
+                value = int(intervalEntry.get_text())
+                self.alarm_controller.set_interval(value)
+                break
+            except:
+                hildon.hildon_banner_show_information(self, "None", "Invalid interval")
+
+        dialog.destroy()
+
     def show_settings(self, widget):
         def reset_total_counter(arg):
             widget.totalCounter = 0
             widget.totalTime = 0
             widget.update_total()
             hildon.hildon_banner_show_information(self, "None", "Total counter was resetted")
+
+        def alarmButton_pressed(widget):
+            self.show_alarm_settings(widget)
 
         def selector_changed(selector, data):
             widget.mode = selector.get_active(0)
@@ -1089,7 +1248,6 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             widget.height = selectorH.get_active(0)
             widget.client.set_int(HEIGHT, widget.height)
             widget.controller.set_height(widget.height)
-
 
         def selectorUnit_changed(selector, data):
             widget.unit = selectorUnit.get_active(0)
@@ -1119,6 +1277,15 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         button.set_title("Reset total counter")
         button.set_alignment(0, 0.8, 1, 1)
         button.connect("clicked", reset_total_counter)
+
+        alarmButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        alarmButton.set_title("Alarm")
+        if self.alarm_controller.get_enable():
+            alarmButton.set_value("Enabled")
+        else:
+            alarmButton.set_value("Disabled")
+        alarmButton.set_alignment(0, 0.8, 1, 1)
+        alarmButton.connect("clicked", alarmButton_pressed)
 
         selector = hildon.TouchSelector(text=True)
         selector.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
@@ -1186,6 +1353,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         pan_area = hildon.PannableArea()
         vbox = gtk.VBox()
         vbox.add(button)
+        vbox.add(alarmButton)
         vbox.add(modePicker)
         vbox.add(heightPicker)
         vbox.add(unitPicker)
