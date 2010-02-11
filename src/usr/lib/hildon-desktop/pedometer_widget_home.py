@@ -35,6 +35,7 @@ UNIT = PATH + "/unit"
 ASPECT = PATH + "/aspect"
 SECONDVIEW = PATH + "/secondview"
 GRAPHVIEW = PATH + "/graphview"
+NOIDLETIME = PATH + "/noidletime"
 LOGGING = PATH + "/logging"
 
 ICONSPATH = "/opt/pedometerhomewidget/"
@@ -373,12 +374,13 @@ class PedoController(Singleton):
     #what to display in second view - 0 - alltime, 1 - today, 2 - week
     second_view = 0
     callback_update_ui = None
+    no_idle_time = False
 
     STEP_LENGTH = 0.7
     #values for the two views in the widget ( current and day/week/alltime)
     v = [PedoValues(), PedoValues()]
 
-    startTime = 0
+    last_time = 0
     is_running = False
     graph_controller = None
 
@@ -407,7 +409,7 @@ class PedoController(Singleton):
 
     def start_pedometer(self):
         self.v[0] = PedoValues()
-        self.startTime = time.time()
+        self.last_time = time.time()
         self.is_running = True
         self.pedometer.start()
         self.notify_UI(True)
@@ -433,15 +435,19 @@ class PedoController(Singleton):
         self.v[0].calories = self.get_calories(self.v[0].steps)
 
     def steps_detected(self, cnt, last_steps=False):
-        self.v[0].steps += cnt
-        self.v[0].dist += self.get_distance(cnt)
-        self.v[0].calories += self.get_distance(cnt)
-        self.v[0].time = time.time() - self.startTime
-        if last_steps:
-            self.save_values()
-            self.notify_UI()
+        if not last_steps and cnt == 0 and self.no_idle_time:
+            logger.info("No steps detected, timer is paused")
         else:
-            self.notify_UI(True)
+            self.v[0].steps += cnt
+            self.v[0].dist += self.get_distance(cnt)
+            self.v[0].calories += self.get_distance(cnt)
+            self.v[0].time += time.time() - self.last_time
+            if last_steps:
+                self.save_values()
+                self.notify_UI()
+            else:
+                self.notify_UI(True)
+        self.last_time = time.time()
 
     def set_mode(self, mode):
         self.mode = mode
@@ -477,6 +483,9 @@ class PedoController(Singleton):
         if self.mode == 1:
             self.STEP_LENGTH *= 1.45
         self.notify_UI()
+
+    def set_no_idle_time(self, value):
+        self.no_idle_time = value
 
     def get_distance(self, steps=None):
         if steps == None:
@@ -882,13 +891,14 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
     pedometer = None
     pedometerInterval = None
     graph_controller = None
-    startTime = None
 
     mode = 0
     height = 0
     unit = 0
     aspect = 0
     second_view = 0
+    graph_view = 0
+    no_idle_time = False
     logging = False
 
     def __init__(self):
@@ -905,6 +915,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             self.aspect = self.client.get_int(ASPECT)
             self.second_view = self.client.get_int(SECONDVIEW)
             self.graph_view = self.client.get_int(GRAPHVIEW)
+            self.no_idle_time = self.client.get_bool(NOIDLETIME)
             self.logging = self.client.get_bool(LOGGING)
 
         except:
@@ -914,6 +925,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             self.client.set_int(ASPECT, 0)
             self.client.set_int(SECONDVIEW, 0)
             self.client.set_int(GRAPHVIEW, 0)
+            self.client.set_bool(NOIDLETIME, False)
             self.client.set_bool(LOGGING, False)
 
         self.controller = PedoController()
@@ -922,6 +934,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         self.controller.set_unit(self.unit)
         self.controller.set_second_view(self.second_view)
         self.controller.set_callback_ui(self.update_values)
+        self.controller.set_no_idle_time(self.no_idle_time)
 
         self.graph_controller = GraphController()
         self.graph_controller.set_current_view(self.graph_view)
@@ -1092,10 +1105,16 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             widget.logging = checkButton.get_active()
             widget.client.set_bool(LOGGING, widget.logging)
 
+        def idleButton_changed(idleButton):
+            widget.no_idle_time = idleButton.get_active()
+            widget.client.set_bool(NOIDLETIME, widget.no_idle_time)
+            widget.controller.set_no_idle_time(widget.no_idle_time)
+
         dialog = gtk.Dialog()
         dialog.set_title("Settings")
-
         dialog.add_button("OK", gtk.RESPONSE_OK)
+
+
         button = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         button.set_title("Reset total counter")
         button.set_alignment(0, 0.8, 1, 1)
@@ -1107,7 +1126,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         selector.append_text("Run")
         selector.connect("changed", selector_changed)
 
-        modePicker = hildon.ButtonPickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        modePicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         modePicker.set_alignment(0.0, 0.5, 1.0, 1.0)
         modePicker.set_title("Select mode")
         modePicker.set_selector(selector)
@@ -1159,6 +1178,11 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         logButton.set_active(widget.logging)
         logButton.connect("toggled", logButton_changed)
 
+        idleButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
+        idleButton.set_label("Pause time when not walking")
+        idleButton.set_active(widget.no_idle_time)
+        idleButton.connect("toggled", idleButton_changed)
+
         pan_area = hildon.PannableArea()
         vbox = gtk.VBox()
         vbox.add(button)
@@ -1166,6 +1190,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         vbox.add(heightPicker)
         vbox.add(unitPicker)
         vbox.add(UIPicker)
+        vbox.add(idleButton)
         #vbox.add(logButton)
 
         pan_area.add_with_viewport(vbox)
