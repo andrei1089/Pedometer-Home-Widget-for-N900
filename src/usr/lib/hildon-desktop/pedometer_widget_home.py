@@ -153,6 +153,12 @@ class PedoValues():
                           self.dist + other.dist,
                           self.calories + other.calories)
 
+    def __sub__(self, other):
+        return PedoValues(self.time - other.time,
+                          self.steps - other.steps,
+                          self.dist - other.dist,
+                          self.calories - other.calories)
+
     def get_print_time(self):
         tdelta = self.time
         hours = int(tdelta / 3600)
