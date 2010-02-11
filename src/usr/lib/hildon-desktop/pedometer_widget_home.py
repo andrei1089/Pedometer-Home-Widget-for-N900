@@ -442,7 +442,8 @@ class PedoController(Singleton):
 
     last_time = 0
     is_running = False
-    graph_controller = None
+
+    observers = []
 
     def __init__(self):
         self.pedometer = PedoCounter(self.steps_detected)
@@ -451,7 +452,6 @@ class PedoController(Singleton):
         self.repository = PedoRepositoryXML()
         self.repository.load()
 
-        self.graph_controller = GraphController()
         self.load_values()
 
     def load_values(self):
@@ -472,7 +472,7 @@ class PedoController(Singleton):
         self.last_time = time.time()
         self.is_running = True
         self.pedometer.start()
-        self.notify_UI(True)
+        self.notify(True)
 
     def stop_pedometer(self):
         self.is_running = False
@@ -504,15 +504,15 @@ class PedoController(Singleton):
             self.v[0].time += time.time() - self.last_time
             if last_steps:
                 self.save_values()
-                self.notify_UI()
+                self.notify()
             else:
-                self.notify_UI(True)
+                self.notify(True)
         self.last_time = time.time()
 
     def set_mode(self, mode):
         self.mode = mode
         self.set_height(self.height_interval)
-        self.notify_UI()
+        self.notify()
 
     def set_unit(self, new_unit):
         self.unit = new_unit
@@ -521,7 +521,7 @@ class PedoController(Singleton):
     def set_second_view(self, second_view):
         self.second_view = second_view
         self.load_values()
-        self.notify_UI()
+        self.notify()
 
     def set_callback_ui(self, func):
         self.callback_update_ui = func
@@ -542,7 +542,7 @@ class PedoController(Singleton):
         #increase step length if RUNNING
         if self.mode == 1:
             self.STEP_LENGTH *= 1.45
-        self.notify_UI()
+        self.notify()
 
     def set_no_idle_time(self, value):
         self.no_idle_time = value
@@ -555,10 +555,22 @@ class PedoController(Singleton):
     def get_calories(self, steps):
         return steps
 
-    def notify_UI(self, optional=False):
+    def add_observer(self, func):
+        try:
+            self.observers.index(func)
+        except:
+            self.observers.append(func)
+
+    def remove_observer(self, func):
+        self.observers.remove(func)
+
+    def notify(self, optional=False):
         if self.callback_update_ui is not None:
             self.callback_update_ui()
-        self.graph_controller.update_ui(optional)
+
+        for func in self.observers:
+            func(optional)
+
 
 class PedoCounter(Singleton):
     COORD_FNAME = "/sys/class/i2c-adapter/i2c-3/3-001d/coord"
@@ -721,6 +733,7 @@ class GraphController(Singleton):
     def __init__(self):
         self.repository = PedoRepositoryXML()
         self.last_update = 0
+        PedoController().add_observer(self.update_ui)
 
     def set_graph(self, widget):
         self.widget = widget
@@ -1050,7 +1063,6 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         eventBox.connect("button-press-event", self.eventBox_clicked)
         eventBox.connect("button-release-event", self.eventBox_clicked_release)
 
-
         mainHBox.add(buttonVBox)
         mainHBox.add(descVBox)
         mainHBox.add(currentVBox)
@@ -1203,8 +1215,6 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         typePicker.set_title("Alarm type")
         typePicker.set_selector(selectorType)
         typePicker.set_active(self.alarm_controller.get_type())
-
-
 
         hbox = gtk.HBox()
         hbox.add(labelEntry)
