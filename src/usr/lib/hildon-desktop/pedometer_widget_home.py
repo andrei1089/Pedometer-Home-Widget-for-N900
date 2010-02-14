@@ -219,7 +219,7 @@ class PedoValues():
         return str(self.steps)
 
     def get_print_calories(self):
-        return str(self.calories)
+        return "%.2f" % self.calories
 
 class PedoRepository(Singleton):
     values = {}
