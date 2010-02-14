@@ -1388,7 +1388,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         modePicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         modePicker.set_alignment(0.0, 0.5, 1.0, 1.0)
-        modePicker.set_title("Select mode")
+        modePicker.set_title("Mode")
         modePicker.set_selector(selector)
         modePicker.set_active(widget.mode)
 
@@ -1403,7 +1403,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         heightPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         heightPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
-        heightPicker.set_title("Select height")
+        heightPicker.set_title("Height")
         heightPicker.set_selector(selectorH)
         heightPicker.set_active(widget.height)
 
@@ -1415,7 +1415,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         unitPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         unitPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
-        unitPicker.set_title("Units")
+        unitPicker.set_title("Unit")
         unitPicker.set_selector(selectorUnit)
         unitPicker.set_active(widget.unit)
 
