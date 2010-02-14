@@ -35,6 +35,7 @@ import hildon
 PATH = "/apps/pedometerhomewidget"
 MODE = PATH + "/mode"
 HEIGHT = PATH + "/height"
+WEIGHT = PATH + "/weight"
 UNIT = PATH + "/unit"
 ASPECT = PATH + "/aspect"
 SECONDVIEW = PATH + "/secondview"
@@ -476,6 +477,19 @@ class PedoController(Singleton):
     def set_unit(self, new_unit):
         self.unit = new_unit
         unit = new_unit
+
+    def get_str_weight_unit(self):
+        if self.unit == 0:
+            return "kg"
+        else:
+            return "lb"
+
+    def set_weight(self, value):
+        self.weight = value
+        self.notify()
+
+    def get_weight(self):
+        return self.weight
 
     def set_second_view(self, second_view):
         self.second_view = second_view
@@ -1037,6 +1051,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
     mode = 0
     height = 0
+    weight = 70
     unit = 0
     aspect = 0
     second_view = 0
@@ -1054,6 +1069,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         try:
             self.mode = self.client.get_int(MODE)
             self.height = self.client.get_int(HEIGHT)
+            self.weight = self.client.get_int(WEIGHT)
             self.unit = self.client.get_int(UNIT)
             self.aspect = self.client.get_int(ASPECT)
             self.second_view = self.client.get_int(SECONDVIEW)
@@ -1073,6 +1089,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         self.controller = PedoController()
         self.controller.set_height(self.height)
+        self.controller.set_weight(self.weight)
         self.controller.set_mode(self.mode)
         self.controller.set_unit(self.unit)
         self.controller.set_second_view(self.second_view)
@@ -1361,6 +1378,40 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             widget.client.set_bool(NOIDLETIME, widget.no_idle_time)
             widget.controller.set_no_idle_time(widget.no_idle_time)
 
+        def weight_dialog(button):
+            dialog = gtk.Dialog("Weight", self.dialog)
+            dialog.add_button("OK", gtk.RESPONSE_OK)
+
+            label = gtk.Label("Weight:")
+            entry = gtk.Entry()
+            entry.set_text(str(self.controller.get_weight()))
+
+            suffixLabel = gtk.Label(self.controller.get_str_weight_unit())
+
+            hbox = gtk.HBox()
+            hbox.add(label)
+            hbox.add(entry)
+            hbox.add(suffixLabel)
+
+            dialog.vbox.add(hbox)
+            dialog.show_all()
+            while 1:
+                response = dialog.run()
+                if response != gtk.RESPONSE_OK:
+                    break
+                try:
+                    value = int(entry.get_text())
+                    if value <= 0:
+                        raise ValueError
+                    self.controller.set_weight(value)
+                    self.client.set_int(WEIGHT, value)
+                    weightButton.set_value(str(self.controller.get_weight()) + \
+                                           " " + self.controller.get_str_weight_unit() )
+                    break
+                except:
+                    hildon.hildon_banner_show_information(self, "None", "Invalid weight")
+            dialog.destroy()
+
         dialog = gtk.Dialog()
         dialog.set_title("Settings")
         dialog.add_button("OK", gtk.RESPONSE_OK)
@@ -1407,6 +1458,12 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         heightPicker.set_selector(selectorH)
         heightPicker.set_active(widget.height)
 
+        weightButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        weightButton.set_title("Weight")
+        weightButton.set_alignment(0, 0.8, 1, 1)
+        weightButton.set_value(str(self.controller.get_weight()) + " " + self.controller.get_str_weight_unit() )
+        weightButton.connect("clicked", weight_dialog)
+
         selectorUnit = hildon.TouchSelector(text=True)
         selectorUnit.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
         selectorUnit.append_text("Metric (km)")
@@ -1449,6 +1506,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         vbox.add(alarmButton)
         vbox.add(modePicker)
         vbox.add(heightPicker)
+        vbox.add(weightButton)
         vbox.add(unitPicker)
         vbox.add(UIPicker)
         vbox.add(idleButton)
