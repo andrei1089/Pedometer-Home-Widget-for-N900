@@ -1,0 +1,161 @@
+<gconfschemafile>
+   <schemalist>
+
+      <schema>
+        <key>/schemas/apps/pedometerhomewidget/mode</key>
+        <applyto>/apps/pedometerhomewidget/mode</applyto>
+        <owner>pedometer</owner>
+        <type>int</type>
+        <default>0</default>
+        <locale name="C">
+          <short>Current mode: 0 - walking, 1 - running</short>
+          <long>Current mode: 0 - walking, 1 - running</long>
+        </locale>
+      </schema>
+
+      <schema>
+        <key>/schemas/apps/pedometerhomewidget/height</key>
+        <applyto>/apps/pedometerhomewidget/height</applyto>
+        <owner>pedometer</owner>
+        <type>int</type>
+        <default>2</default>
+        <locale name="C">
+          <short>Height interval of the person using the pedometer</short>
+          <long>Height interval of the person using the pedometer</long>
+        </locale>
+      </schema>
+
+      <schema>
+        <key>/schemas/apps/pedometerhomewidget/weight</key>
+        <applyto>/apps/pedometerhomewidget/weight</applyto>
+        <owner>pedometer</owner>
+        <type>int</type>
+        <default>70</default>
+        <locale name="C">
+          <short>Weight of the person using the pedometer</short>
+          <long>Weight interval of the person using the pedometer</long>
+        </locale>
+      </schema>
+
+      <schema>
+        <key>/schemas/apps/pedometerhomewidget/unit</key>
+        <applyto>/apps/pedometerhomewidget/unit</applyto>
+        <owner>pedometer</owner>
+        <type>int</type>
+        <default>0</default>
+        <locale name="C">
+          <short>Metric / Imperial </short>
+          <long>Metric / Imperial</long>
+        </locale>
+      </schema>
+
+      <schema>
+        <key>/schemas/apps/pedometerhomewidget/aspect</key>
+        <applyto>/apps/pedometerhomewidget/aspect</applyto>
+        <owner>pedometer</owner>
+        <type>int</type>
+        <default>0</default>
+        <locale name="C">
+          <short>Widget aspect</short>
+          <long>Widget aspect</long>
+        </locale>
+      </schema>
+
+      <schema>
+        <key>/schemas/apps/pedometerhomewidget/secondview</key>
+        <applyto>/apps/pedometerhomewidget/secondview</applyto>
+        <owner>pedometer</owner>
+        <type>int</type>
+        <default>0</default>
+        <locale name="C">
+          <short>Second view content</short>
+          <long>Second view content</long>
+        </locale>
+      </schema>
+
+      <schema>
+        <key>/schemas/apps/pedometerhomewidget/graphview</key>
+        <applyto>/apps/pedometerhomewidget/graphview</applyto>
+        <owner>pedometer</owner>
+        <type>int</type>
+        <default>0</default>
+        <locale name="C">
+          <short>Graph content</short>
+          <long>Graph content</long>
+        </locale>
+      </schema>
+
+      <schema>
+        <key>/schemas/apps/pedometerhomewidget/noidletime</key>
+        <applyto>/apps/pedometerhomewidget/noidletime</applyto>
+        <owner>pedometer</owner>
+        <type>bool</type>
+        <default>FALSE</default>
+        <locale name="C">
+          <short>Whether or not to count time when no steps are detected</short>
+          <long>Whether or not to count time when no steps are detected</long>
+        </locale>
+      </schema>
+
+      <schema>
+        <key>/schemas/apps/pedometerhomewidget/logging</key>
+        <applyto>/apps/pedometerhomewidget/logging</applyto>
+        <owner>pedometer</owner>
+        <type>bool</type>
+        <default>FALSE</default>
+        <locale name="C">
+          <short>Create log files with data from accelerometer</short>
+          <long>Create log files with data from accelerometer</long>
+        </locale>
+      </schema>
+
+      <schema>
+        <key>/schemas/apps/pedometerhomewidget/alarm/enable</key>
+        <applyto>/apps/pedometerhomewidget/alarm/enable</applyto>
+        <owner>pedometer</owner>
+        <type>bool</type>
+        <default>FALSE</default>
+        <locale name="C">
+          <short>Whether or not the alarm is enabled</short>
+          <long>Whether or not the alarm is enabled</long>
+        </locale>
+      </schema>
+
+      <schema>
+        <key>/schemas/apps/pedometerhomewidget/alarm/fname</key>
+        <applyto>/apps/pedometerhomewidget/alarm/fname</applyto>
+        <owner>pedometer</owner>
+        <type>string</type>
+        <default>/home/user/MyDocs/.sounds/Ringtones/Bicycle.aac</default>
+        <locale name="C">
+          <short>Default sound for alarm</short>
+          <long>Default sound for alarm</long>
+        </locale>
+      </schema>
+
+      <schema>
+        <key>/schemas/apps/pedometerhomewidget/alarm/interval</key>
+        <applyto>/apps/pedometerhomewidget/alarm/interval</applyto>
+        <owner>pedometer</owner>
+        <type>int</type>
+        <default>5</default>
+        <locale name="C">
+          <short>Whether or not to count time when no steps are detected</short>
+          <long>Whether or not to count time when no steps are detected</long>
+        </locale>
+      </schema>
+
+      <schema>
+        <key>/schemas/apps/pedometerhomewidget/alarm/type</key>
+        <applyto>/apps/pedometerhomewidget/alarm/type</applyto>
+        <owner>pedometer</owner>
+        <type>int</type>
+        <default>0</default>
+        <locale name="C">
+          <short>Type of alarm</short>
+          <long>Alerts based on steps / time / distance, etc</long>
+        </locale>
+      </schema>
+
+  </schemalist>
+</gconfschemafile>
