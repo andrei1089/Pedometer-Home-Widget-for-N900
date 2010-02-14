@@ -460,7 +460,7 @@ class PedoController(Singleton):
         else:
             self.v[0].steps += cnt
             self.v[0].dist += self.get_distance(cnt)
-            self.v[0].calories += self.get_distance(cnt)
+            self.v[0].calories += self.get_calories(self.get_distance(cnt))
             self.v[0].time += time.time() - self.last_time
             if last_steps:
                 self.save_values()
@@ -468,6 +468,24 @@ class PedoController(Singleton):
             else:
                 self.notify(True)
         self.last_time = time.time()
+
+    def get_calories(self, distance):
+        """calculate lost calories for the distance and weight given as parameters
+        """
+        #different coefficient for running and walking
+        if self.mode == 0:
+            coef = 0.53
+        else:
+            coef = 0.75
+
+        #convert distance from meters to miles
+        distance *= 0.000621371192
+
+        weight = self.weight
+        #convert weight from kg to pounds
+        if self.unit == 0:
+            weight *= 2.20462262
+        return weight * distance * coef
 
     def set_mode(self, mode):
         self.mode = mode
@@ -524,9 +542,6 @@ class PedoController(Singleton):
         if steps == None:
             steps = self.counter
         return self.STEP_LENGTH * steps;
-
-    def get_calories(self, steps):
-        return steps
 
     def add_observer(self, func):
         try:
