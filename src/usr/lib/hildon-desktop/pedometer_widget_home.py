@@ -401,6 +401,9 @@ class PedoController(Singleton):
 
     observers = []
 
+    midnight_set = False
+    midnight_source_id = None
+
     def __init__(self):
         self.pedometer = PedoCounter(self.steps_detected)
         self.pedometerInterval = PedoIntervalCounter()
@@ -409,6 +412,29 @@ class PedoController(Singleton):
         self.repository.load()
 
         self.load_values()
+
+        if not self.midnight_set:
+            self.update_at_midnight()
+            self.midnight_set = True
+
+    def update_at_midnight(self):
+        next_day = date.today() + timedelta(days=1)
+        diff = time.mktime(next_day.timetuple()) - time.time()
+        diff = int(diff+5)
+        self.midnight_source_id = gobject.timeout_add_seconds(diff, self.midnight_callback, True)
+
+    def stop_midnight_callback(self):
+        if self.midnight_source_id is not None:
+            gobject.source_remove(self.midnight_source_id)
+
+    def midnight_callback(self, first=False):
+        self.load_values()
+        self.notify()
+        if first:
+            self.midnight_source_id = gobject.timeout_add_seconds(24*3600, self.midnight_callback)
+            return False
+        else:
+            return True
 
     def load_values(self):
         if self.second_view == 0:
@@ -1527,6 +1553,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             return
 
         self.pedometer.request_stop()
+        self.controller.stop_midnight_callback()
 
     def update_values(self):
         #TODO: do not update if the widget is not on the active desktop
