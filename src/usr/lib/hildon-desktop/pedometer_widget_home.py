@@ -571,16 +571,11 @@ class AlarmController(Singleton):
 
     def __init__(self):
         self.client = gconf.client_get_default()
-        try:
-            self.enable = self.client.get_bool(ALARM_ENABLE)
-            self.fname = self.client.get_string(ALARM_FNAME)
-            self.interval = self.client.get_int(ALARM_INTERVAL)
-            self.type = self.client.get_int(ALARM_TYPE)
-        except:
-            self.client.set_bool(ALARM_ENABLE, self.enable)
-            self.client.set_string(ALARM_FNAME, self.fname)
-            self.client.set_int(ALARM_INTERVAL, self.interval)
-            self.client.set_int(ALARM_TYPE, self.type)
+
+        self.enable = self.client.get_bool(ALARM_ENABLE)
+        self.fname = self.client.get_string(ALARM_FNAME)
+        self.interval = self.client.get_int(ALARM_INTERVAL)
+        self.type = self.client.get_int(ALARM_TYPE)
 
         self.pedo_controller = PedoController()
         if self.enable:
@@ -1081,26 +1076,16 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         gobject.type_register(GraphWidget)
 
         self.client = gconf.client_get_default()
-        try:
-            self.mode = self.client.get_int(MODE)
-            self.height = self.client.get_int(HEIGHT)
-            self.weight = self.client.get_int(WEIGHT)
-            self.unit = self.client.get_int(UNIT)
-            self.aspect = self.client.get_int(ASPECT)
-            self.second_view = self.client.get_int(SECONDVIEW)
-            self.graph_view = self.client.get_int(GRAPHVIEW)
-            self.no_idle_time = self.client.get_bool(NOIDLETIME)
-            self.logging = self.client.get_bool(LOGGING)
 
-        except:
-            self.client.set_int(MODE, 0)
-            self.client.set_int(HEIGHT, 0)
-            self.client.set_int(UNIT, 0)
-            self.client.set_int(ASPECT, 0)
-            self.client.set_int(SECONDVIEW, 0)
-            self.client.set_int(GRAPHVIEW, 0)
-            self.client.set_bool(NOIDLETIME, False)
-            self.client.set_bool(LOGGING, False)
+        self.mode = self.client.get_int(MODE)
+        self.height = self.client.get_int(HEIGHT)
+        self.weight = self.client.get_int(WEIGHT)
+        self.unit = self.client.get_int(UNIT)
+        self.aspect = self.client.get_int(ASPECT)
+        self.second_view = self.client.get_int(SECONDVIEW)
+        self.graph_view = self.client.get_int(GRAPHVIEW)
+        self.no_idle_time = self.client.get_bool(NOIDLETIME)
+        self.logging = self.client.get_bool(LOGGING)
 
         self.controller = PedoController()
         self.controller.set_height(self.height)
