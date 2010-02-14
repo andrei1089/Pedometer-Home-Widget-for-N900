@@ -22,26 +22,28 @@ if __name__ == "__main__":
     p.author="Andrei Mirestean"
     p.mail="andrei.mirestean@gmail.com"
     p.url="https://garage.maemo.org/projects/pedometerwidget/"
-    p.depends = "python(>=2.5), python-gtk2, python-gobject, python-hildondesktop, python-hildon, python-cairo, hildon-desktop-python-loader, python-gconf"
+    p.depends = "python(>=2.5), python-gtk2, python-gobject, python-hildondesktop, python-hildon, python-cairo, hildon-desktop-python-loader, python-gconf, python-xml, python-gst0.10"
     p.section="user/desktop"
-    p.icon = "/home/andrei/pedometer-widget-0.1/logo_mic.png"
+    p.icon = "/home/andrei/pedometer-widget-0.1/icon.png"
     p.arch="all"                #should be all for python, any for all arch
     p.urgency="low"             #not used in maemo onl for deb os
     p.distribution="fremantle"
     p.repository="extras-devel"
     p.xsbc_bugtracker="https://garage.maemo.org/tracker/?group_id=1272"
-    #  p.postinstall="""#!/bin/sh
-    #  chmod +x /usr/bin/mclock.py""" #Set here your post install script
+    p.maemodisplayname = "Pedometer Home Widget"
+    p.postinstall="""#!/bin/sh
+    GCONF_CONFIG_SOURCE=`gconftool-2 --get-default-source` \
+              gconftool-2 --makefile-install-rule /etc/gconf/schemas/pedometer.schemas""" #Set here your post install script
     #  p.postremove="""#!/bin/sh
     #  chmod +x /usr/bin/mclock.py""" #Set here your post remove script
     #  p.preinstall="""#!/bin/sh
     #  chmod +x /usr/bin/mclock.py""" #Set here your pre install script
     #  p.preremove="""#!/bin/sh
     #  chmod +x /usr/bin/mclock.py""" #Set here your pre remove script
-    version = "0.1.1"           #Version of your software, e.g. "1.2.0" or "0.8.2"
+    version = "0.2"           #Version of your software, e.g. "1.2.0" or "0.8.2"
     build = "1"                 #Build number, e.g. "1" for the first build of this version of your software. Increment for later re-builds of the same version of your software.
     #Text with changelog information to be displayed in the package "Details" tab of the Maemo Application Manager
-    changeloginformation ="fix hildon-home crash when closing the widget\nfix settings dialog bug"
+    changeloginformation ="New features: \n*calculate number of lost calories\n*show graphs of steps/distance/calories\n*save history in XML file\n*set alarm for steps/calories/distance\n*option to pause timer when not walking"
     dir_name = "src"            #Name of the subfolder containing your package source files (e.g. usr\share\icons\hicolor\scalable\myappicon.svg, usr\lib\myapp\somelib.py). We suggest to leave it named src in all projects and will refer to that in the wiki article on maemo.org
     for root, dirs, files in os.walk(dir_name):
         real_dir = root[len(dir_name):]
