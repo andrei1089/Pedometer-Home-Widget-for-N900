@@ -1081,8 +1081,6 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
     second_view_labels = ["All-time", "Today", "This week"]
 
     controller = None
-    pedometer = None
-    pedometerInterval = None
     graph_controller = None
 
     mode = 0
@@ -1549,10 +1547,8 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         dialog.destroy()
 
     def close_requested(self, widget):
-        if self.pedometer is None:
-            return
-
-        self.pedometer.request_stop()
+        if self.controller.is_running:
+            self.controller.stop_pedometer()
         self.controller.stop_midnight_callback()
 
     def update_values(self):
