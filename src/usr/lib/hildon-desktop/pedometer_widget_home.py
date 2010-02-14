@@ -697,7 +697,7 @@ class PedoCounter(Singleton):
     COORD_FNAME_SDK = "/home/andrei/pedometer-widget-0.1/date.txt"
     LOGFILE = "/home/user/log_pedometer"
     #time in ms between two accelerometer data reads
-    COORD_GET_INTERVAL = 10
+    COORD_GET_INTERVAL = 25
 
     COUNT_INTERVAL = 5
 
