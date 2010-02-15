@@ -241,7 +241,9 @@ class PedoRepository(Singleton):
     def get_values(self):
         return self.values
 
-    def add_values(self, values, when=date.today()):
+    def add_values(self, values, when=None):
+        if when is None:
+            when = date.today()
         """add PedoValues values to repository """
         try:
             self.values[when] = self.values[when] + values
