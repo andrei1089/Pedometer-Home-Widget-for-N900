@@ -150,7 +150,6 @@ class PedoValues():
         self.steps = steps
         self.calories = calories
         self.dist = dist
-        self.unit = unit
 
     def __add__(self, other):
         return PedoValues(self.time + other.time,
@@ -175,20 +174,22 @@ class PedoValues():
         return strtime
 
     def get_print_distance(self):
+        global unit
         if self.dist > 1000:
-            if self.unit == 0:
+            if unit == 0:
                 return "%.2f km" % (self.dist / 1000)
             else:
                 return "%.2f mi" % (self.dist / 1609.344)
         else:
-            if self.unit == 0:
+            if unit == 0:
                 return "%d m" % self.dist
             else:
                 return "%d ft" % int(self.dist * 3.2808)
 
     def get_avg_speed(self):
+        global unit
         conv = 0
-        if self.unit:
+        if unit:
             conv = 2.23693629
         else:
             conv = 3.6
@@ -199,9 +200,10 @@ class PedoValues():
         return speed * conv
 
     def get_print_avg_speed(self):
+        global unit
         suffix = ""
         conv = 0
-        if self.unit:
+        if unit:
             suffix = "mi/h"
             conv = 2.23693629
         else:
@@ -518,11 +520,14 @@ class PedoController(Singleton):
     def set_mode(self, mode):
         self.mode = mode
         self.set_height(self.height_interval)
+        self.pedometerInterval.set_mode(self.mode)
         self.notify()
 
     def set_unit(self, new_unit):
         self.unit = new_unit
+        global unit
         unit = new_unit
+        self.notify()
 
     def get_str_weight_unit(self):
         if self.unit == 0:
