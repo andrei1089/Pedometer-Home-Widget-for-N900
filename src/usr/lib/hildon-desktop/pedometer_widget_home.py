@@ -1573,6 +1573,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         else:
             self.controller.start_pedometer()
             self.button.set_icon(ICONSPATH + "stop.png")
+            hildon.hildon_banner_show_information(self, "None", "Keep the N900 in a pocket close to your hip for best results")
 
     def do_expose_event(self, event):
         cr = self.window.cairo_create()
