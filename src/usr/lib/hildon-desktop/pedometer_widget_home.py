@@ -462,6 +462,8 @@ class PedoController(Singleton):
 
     def reset_all_values(self):
         self.repository.reset_values()
+        self.v[0] = PedoValues()
+        self.v[1] = PedoValues()
         self.notify()
 
     def stop_pedometer(self):
