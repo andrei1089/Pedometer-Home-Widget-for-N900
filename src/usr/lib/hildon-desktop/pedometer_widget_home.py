@@ -1459,6 +1459,34 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
                     hildon.hildon_banner_show_information(self, "None", "Invalid weight")
             dialog.destroy()
 
+        def sensitivity_dialog(button):
+
+            def seekbar_changed(seekbar):
+                label.set_text(str(seekbar.get_position()) + " %")
+
+            dialog = gtk.Dialog("Sensitivity", self.dialog)
+            dialog.add_button("OK", gtk.RESPONSE_OK)
+            seekbar = hildon.Seekbar()
+            seekbar.set_size_request(400, -1)
+            seekbar.set_total_time(200)
+            seekbar.set_position(100)
+            seekbar.connect("value-changed", seekbar_changed)
+
+            hbox = gtk.HBox()
+            hbox.add(seekbar)
+            label = gtk.Label("100 %")
+            label.set_size_request(30, -1)
+            hbox.add(label)
+
+            dialog.vbox.add(hbox)
+            dialog.show_all()
+
+            if dialog.run() == gtk.RESPONSE_OK:
+                #save new value for sensitivity
+                pass
+
+            dialog.destroy()
+
         dialog = gtk.Dialog()
         dialog.set_title("Settings")
         dialog.add_button("OK", gtk.RESPONSE_OK)
@@ -1556,6 +1584,11 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         UIPicker.set_selector(selectorUI)
         UIPicker.set_active(widget.aspect)
 
+        sensitivityButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        sensitivityButton.set_title("Sensitivity")
+        sensitivityButton.set_alignment(0, 0.8, 1, 1)
+        sensitivityButton.connect("clicked", sensitivity_dialog)
+
         logButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
         logButton.set_label("Log data")
         logButton.set_active(widget.logging)
@@ -1574,6 +1607,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         vbox.add(heightPicker_English)
         vbox.add(weightButton)
         vbox.add(unitPicker)
+        vbox.add(sensitivityButton)
         vbox.add(UIPicker)
         vbox.add(idleButton)
         vbox.add(resetButton)
