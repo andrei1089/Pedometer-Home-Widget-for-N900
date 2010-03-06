@@ -26,6 +26,18 @@
       </schema>
 
       <schema>
+        <key>/schemas/apps/pedometerhomewidget/step_length</key>
+        <applyto>/apps/pedometerhomewidget/step_length</applyto>
+        <owner>pedometer</owner>
+        <type>float</type>
+        <default>0.7</default>
+        <locale name="C">
+          <short>Custom value for step length</short>
+          <long>Custom value for step length</long>
+        </locale>
+      </schema>
+
+      <schema>
         <key>/schemas/apps/pedometerhomewidget/weight</key>
         <applyto>/apps/pedometerhomewidget/weight</applyto>
         <owner>pedometer</owner>

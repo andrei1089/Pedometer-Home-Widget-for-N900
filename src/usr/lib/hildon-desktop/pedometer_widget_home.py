@@ -35,6 +35,7 @@ import hildon
 PATH = "/apps/pedometerhomewidget"
 MODE = PATH + "/mode"
 HEIGHT = PATH + "/height"
+STEP_LENGTH = PATH + "/step_length"
 WEIGHT = PATH + "/weight"
 UNIT = PATH + "/unit"
 SENSITIVITY = PATH + "/sensitivity"
@@ -566,8 +567,10 @@ class PedoController(Singleton):
     def set_callback_ui(self, func):
         self.callback_update_ui = func
 
-    def set_height(self, height_interval):
-        self.height_inteval = height_interval
+    def set_height(self, height_interval, step_length=None):
+        self.height_interval = height_interval
+        if step_length is None:
+            step_length = self.STEP_LENGTH
         #set height, will affect the distance
         if height_interval == 0:
             self.STEP_LENGTH = 0.59
@@ -579,6 +582,8 @@ class PedoController(Singleton):
             self.STEP_LENGTH = 0.77
         elif height_interval == 4:
             self.STEP_LENGTH = 0.83
+        elif height_interval == 5:
+            self.STEP_LENGTH = step_length
         #increase step length if RUNNING
         if self.mode == 1:
             self.STEP_LENGTH *= 1.45
@@ -1127,6 +1132,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         self.mode = self.client.get_int(MODE)
         self.height = self.client.get_int(HEIGHT)
+        self.step_length = self.client.get_float(STEP_LENGTH)
         self.weight = self.client.get_int(WEIGHT)
         self.unit = self.client.get_int(UNIT)
         self.sensitivity = self.client.get_int(SENSITIVITY)
@@ -1137,7 +1143,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         self.logging = self.client.get_bool(LOGGING)
 
         self.controller = PedoController()
-        self.controller.set_height(self.height)
+        self.controller.set_height(self.height, self.step_length)
         self.controller.set_weight(self.weight)
         self.controller.set_mode(self.mode)
         self.controller.set_unit(self.unit)
@@ -1404,26 +1410,13 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             widget.client.set_int(MODE, widget.mode)
             widget.controller.set_mode(widget.mode)
 
-        def selectorH_changed(selector, data):
-            widget.height = selector.get_active(0)
-            widget.client.set_int(HEIGHT, widget.height)
-            widget.controller.set_height(widget.height)
-
         def selectorUnit_changed(selector, data):
             widget.unit = selector.get_active(0)
             widget.client.set_int(UNIT, widget.unit)
             widget.controller.set_unit(widget.unit)
 
-            if widget.unit == 0:
-                self.heightPicker.set_active(widget.height)
-                self.heightPicker.show()
-                self.heightPicker_English.hide()
-            else:
-                self.heightPicker_English.set_active(widget.height)
-                self.heightPicker_English.show()
-                self.heightPicker.hide()
-
             update_weight_button()
+            stepLengthButton_value_update()
 
         def selectorUI_changed(selector, data):
             widget.aspect = selectorUI.get_active(0)
@@ -1506,10 +1499,127 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
             dialog.destroy()
 
+        def stepLengthButton_value_update():
+            if widget.height == 5:
+                l_unit = ["m", "ft"]
+                stepLengthButton.set_value("Custom value: %.2f %s" % (widget.step_length, l_unit[widget.unit]))
+            else:
+                h = [ ["< 1.50 m", "1.50 - 1.65 m", "1.66 - 1.80 m", "1.81 - 1.95 m", " > 1.95 m"],
+                      ["< 5 ft", "5 - 5.5 ft", "5.5 - 6 ft", "6 - 6.5 ft", "> 6.5 ft"]]
+                str = "Using predefined value for height: %s" % h[widget.unit][widget.height]
+                stepLengthButton.set_value(str)
+
+        def stepLength_dialog(button):
+            def selectorH_changed(selector, data, dialog):
+                widget.height = selector.get_active(0)
+                widget.client.set_int(HEIGHT, widget.height)
+                widget.controller.set_height(widget.height)
+                stepLengthButton_value_update()
+
+            def manualButton_clicked(button, dialog):
+                dlg = gtk.Dialog()
+                dlg.set_title("Custom step length")
+                dlg.add_button("OK", gtk.RESPONSE_OK)
+
+                label = gtk.Label("Length")
+
+                entry = hildon.Entry(gtk.HILDON_SIZE_AUTO_WIDTH)
+                if widget.height == 5:
+                    entry.set_text(str(widget.step_length))
+
+                labelSuffix = gtk.Label()
+                if widget.unit == 0:
+                    labelSuffix.set_label("m")
+                else:
+                    labelSuffix.set_label("ft")
+                hbox = gtk.HBox()
+                hbox.add(label)
+                hbox.add(entry)
+                hbox.add(labelSuffix)
+                dlg.vbox.add(hbox)
+                dlg.show_all()
+
+                while 1:
+                    response = dlg.run()
+                    if response != gtk.RESPONSE_OK:
+                        break
+                    try:
+                        value = float(entry.get_text())
+                        if value <= 0:
+                            raise ValueError
+                        self.controller.set_height(5, value)
+                        self.client.set_int(HEIGHT, 5)
+                        self.client.set_float(STEP_LENGTH, value)
+                        widget.height = 5
+                        widget.step_length = value
+                        stepLengthButton_value_update()
+                        break
+                    except ValueError:
+                        hildon.hildon_banner_show_information(self, "None", "Invalid length")
+                dlg.destroy()
+                dialog.destroy()
+
+            def heightButton_clicked(button, dialog):
+                dialog.destroy()
+
+            dialog = gtk.Dialog()
+            dialog.set_title("Step length")
+
+            manualButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+            manualButton.set_title("Enter custom value")
+            manualButton.set_alignment(0, 0.8, 1, 1)
+            manualButton.connect("clicked", manualButton_clicked, dialog)
+
+            selectorH = hildon.TouchSelector(text=True)
+            selectorH.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
+            selectorH.append_text("< 1.50 m")
+            selectorH.append_text("1.50 - 1.65 m")
+            selectorH.append_text("1.66 - 1.80 m")
+            selectorH.append_text("1.81 - 1.95 m")
+            selectorH.append_text(" > 1.95 m")
+
+            selectorH_English = hildon.TouchSelector(text=True)
+            selectorH_English.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
+            selectorH_English.append_text("< 5 ft")
+            selectorH_English.append_text("5 - 5.5 ft")
+            selectorH_English.append_text("5.5 - 6 ft")
+            selectorH_English.append_text("6 - 6.5 ft")
+            selectorH_English.append_text("> 6.5 ft")
+
+            heightPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+            heightPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
+            heightPicker.set_title("Use predefined values for height")
+
+            if widget.height < 5:
+                heightPicker.set_active(widget.height)
+
+            if widget.unit == 0:
+                heightPicker.set_selector(selectorH)
+            else:
+                heightPicker.set_selector(selectorH_English)
+
+            if widget.height < 5:
+                heightPicker.set_active(widget.height)
+            heightPicker.get_selector().connect("changed", selectorH_changed, dialog)
+            heightPicker.connect("value-changed", heightButton_clicked, dialog)
+
+            dialog.vbox.add(heightPicker)
+            dialog.vbox.add(manualButton)
+            dialog.show_all()
+
+            if  dialog.run() == gtk.RESPONSE_DELETE_EVENT:
+                dialog.destroy()
+
         dialog = gtk.Dialog()
         dialog.set_title("Settings")
         dialog.add_button("OK", gtk.RESPONSE_OK)
         self.dialog = dialog
+
+        stepLengthButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        stepLengthButton.set_title("Step length")
+        stepLengthButton.set_alignment(0, 0.8, 1, 1)
+        stepLengthButton.connect("clicked", stepLength_dialog)
+        stepLengthButton_value_update()
 
         resetButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         resetButton.set_title("Reset total counter")
@@ -1537,38 +1647,6 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         modePicker.set_selector(selector)
         modePicker.set_active(widget.mode)
 
-        selectorH = hildon.TouchSelector(text=True)
-        selectorH.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
-        selectorH.append_text("< 1.50 m")
-        selectorH.append_text("1.50 - 1.65 m")
-        selectorH.append_text("1.66 - 1.80 m")
-        selectorH.append_text("1.81 - 1.95 m")
-        selectorH.append_text(" > 1.95 m")
-        selectorH.connect("changed", selectorH_changed)
-
-        selectorH_English = hildon.TouchSelector(text=True)
-        selectorH_English.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
-        selectorH_English.append_text("< 5 ft")
-        selectorH_English.append_text("5 - 5.5 ft")
-        selectorH_English.append_text("5.5 - 6 ft")
-        selectorH_English.append_text("6 - 6.5 ft")
-        selectorH_English.append_text("> 6.5 ft")
-        selectorH_English.connect("changed", selectorH_changed)
-
-        heightPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        heightPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
-        heightPicker.set_title("Height")
-        heightPicker.set_selector(selectorH)
-        heightPicker.set_active(widget.height)
-
-        heightPicker_English = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        heightPicker_English.set_alignment(0.0, 0.5, 1.0, 1.0)
-        heightPicker_English.set_title("Height")
-        heightPicker_English.set_selector(selectorH_English)
-        heightPicker_English.set_active(widget.height)
-
-        self.heightPicker = heightPicker
-        self.heightPicker_English = heightPicker_English
 
         weightButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         weightButton.set_title("Weight")
@@ -1609,6 +1687,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         sensitivityButton.set_value(str(self.controller.get_sensitivity()) + " %")
         sensitivityButton.connect("clicked", sensitivity_dialog)
 
+
         logButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
         logButton.set_label("Log data")
         logButton.set_active(widget.logging)
@@ -1623,8 +1702,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         vbox = gtk.VBox()
         vbox.add(alarmButton)
         vbox.add(modePicker)
-        vbox.add(heightPicker)
-        vbox.add(heightPicker_English)
+        vbox.add(stepLengthButton)
         vbox.add(weightButton)
         vbox.add(unitPicker)
         vbox.add(sensitivityButton)
@@ -1639,13 +1717,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         dialog.vbox.add(pan_area)
         dialog.show_all()
 
-        if widget.unit == 0:
-            self.heightPicker_English.hide()
-        else:
-            self.heightPicker.hide()
-
         response = dialog.run()
-        #hildon.hildon_banner_show_information(self, "None", "You have to Stop/Start the counter to apply the new settings")
         dialog.destroy()
 
     def close_requested(self, widget):
