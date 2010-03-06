@@ -1610,6 +1610,11 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             if  dialog.run() == gtk.RESPONSE_DELETE_EVENT:
                 dialog.destroy()
 
+        def donateButton_clicked(button, dialog):
+            url = "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=BKE6E9SLK7NP4&lc=RO&item_name=Pedometer%20Widget&currency_code=EUR&bn=PP%2dDonationsBF%3abtn_donateCC_LG%2egif%3aNonHosted"
+            command = "dbus-send --system --type=method_call --dest=\"com.nokia.osso_browser\"  --print-reply /com/nokia/osso_browser/request com.nokia.osso_browser.load_url string:\"%s\"" % url
+            os.system(command)
+
         dialog = gtk.Dialog()
         dialog.set_title("Settings")
         dialog.add_button("OK", gtk.RESPONSE_OK)
@@ -1687,6 +1692,10 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         sensitivityButton.set_value(str(self.controller.get_sensitivity()) + " %")
         sensitivityButton.connect("clicked", sensitivity_dialog)
 
+        donateButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        donateButton.set_title("Donate")
+        donateButton.set_alignment(0, 0.8, 1, 1)
+        donateButton.connect("clicked", donateButton_clicked, dialog)
 
         logButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
         logButton.set_label("Log data")
@@ -1709,6 +1718,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         vbox.add(UIPicker)
         vbox.add(idleButton)
         vbox.add(resetButton)
+        vbox.add(donateButton)
         #vbox.add(logButton)
 
         pan_area.add_with_viewport(vbox)
