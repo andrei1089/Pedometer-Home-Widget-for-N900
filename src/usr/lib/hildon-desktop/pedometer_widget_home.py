@@ -1388,14 +1388,24 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             widget.controller.set_mode(widget.mode)
 
         def selectorH_changed(selector, data):
-            widget.height = selectorH.get_active(0)
+            widget.height = selector.get_active(0)
             widget.client.set_int(HEIGHT, widget.height)
             widget.controller.set_height(widget.height)
 
         def selectorUnit_changed(selector, data):
-            widget.unit = selectorUnit.get_active(0)
+            widget.unit = selector.get_active(0)
             widget.client.set_int(UNIT, widget.unit)
             widget.controller.set_unit(widget.unit)
+
+            if widget.unit == 0:
+                self.heightPicker.set_active(widget.height)
+                self.heightPicker.show()
+                self.heightPicker_English.hide()
+            else:
+                self.heightPicker_English.set_active(widget.height)
+                self.heightPicker_English.show()
+                self.heightPicker.hide()
+
 
         def selectorUI_changed(selector, data):
             widget.aspect = selectorUI.get_active(0)
@@ -1485,11 +1495,29 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         selectorH.append_text(" > 1.95 m")
         selectorH.connect("changed", selectorH_changed)
 
+        selectorH_English = hildon.TouchSelector(text=True)
+        selectorH_English.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
+        selectorH_English.append_text("< 5 ft")
+        selectorH_English.append_text("5 - 5.5 ft")
+        selectorH_English.append_text("5.5 - 6 ft")
+        selectorH_English.append_text("6 - 6.5 ft")
+        selectorH_English.append_text("> 6.5 ft")
+        selectorH_English.connect("changed", selectorH_changed)
+
         heightPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         heightPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
         heightPicker.set_title("Height")
         heightPicker.set_selector(selectorH)
         heightPicker.set_active(widget.height)
+
+        heightPicker_English = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        heightPicker_English.set_alignment(0.0, 0.5, 1.0, 1.0)
+        heightPicker_English.set_title("Height")
+        heightPicker_English.set_selector(selectorH_English)
+        heightPicker_English.set_active(widget.height)
+
+        self.heightPicker = heightPicker
+        self.heightPicker_English = heightPicker_English
 
         weightButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         weightButton.set_title("Weight")
@@ -1539,6 +1567,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         vbox.add(alarmButton)
         vbox.add(modePicker)
         vbox.add(heightPicker)
+        vbox.add(heightPicker_English)
         vbox.add(weightButton)
         vbox.add(unitPicker)
         vbox.add(UIPicker)
@@ -1551,6 +1580,12 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         dialog.vbox.add(pan_area)
         dialog.show_all()
+
+        if widget.unit == 0:
+            self.heightPicker_English.hide()
+        else:
+            self.heightPicker.hide()
+
         response = dialog.run()
         #hildon.hildon_banner_show_information(self, "None", "You have to Stop/Start the counter to apply the new settings")
         dialog.destroy()
