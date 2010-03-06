@@ -38,6 +38,18 @@
       </schema>
 
       <schema>
+        <key>/schemas/apps/pedometerhomewidget/sensitivity</key>
+        <applyto>/apps/pedometerhomewidget/sensitivity</applyto>
+        <owner>pedometer</owner>
+        <type>int</type>
+        <default>100</default>
+        <locale name="C">
+          <short>Set sensitivity in % relative to the default value</short>
+          <long>Set sensitivity in % relative to the default value</long>
+        </locale>
+      </schema>
+
+      <schema>
         <key>/schemas/apps/pedometerhomewidget/unit</key>
         <applyto>/apps/pedometerhomewidget/unit</applyto>
         <owner>pedometer</owner>

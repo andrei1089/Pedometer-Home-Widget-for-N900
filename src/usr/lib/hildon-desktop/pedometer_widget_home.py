@@ -37,6 +37,7 @@ MODE = PATH + "/mode"
 HEIGHT = PATH + "/height"
 WEIGHT = PATH + "/weight"
 UNIT = PATH + "/unit"
+SENSITIVITY = PATH + "/sensitivity"
 ASPECT = PATH + "/aspect"
 SECONDVIEW = PATH + "/secondview"
 GRAPHVIEW = PATH + "/graphview"
@@ -64,6 +65,8 @@ class Singleton(object):
 class PedoIntervalCounter(Singleton):
     MIN_THRESHOLD = 500
     MIN_TIME_STEPS = 0.5
+    sensitivity = 100
+    mode = 0
     x = []
     y = []
     z = []
@@ -81,12 +84,16 @@ class PedoIntervalCounter(Singleton):
         #runnig, higher threshold to prevent fake steps
         self.mode = mode
         if mode == 1:
-            self.MIN_THRESHOLD = 650
+            self.MIN_THRESHOLD = 650.0 * (200 - self.sensitivity) / 100
             self.MIN_TIME_STEPS = 0.35
         #walking
         else:
-            self.MIN_THRESHOLD = 500
+            self.MIN_THRESHOLD = 500.0 * (200 - self.sensitivity) / 100
             self.MIN_TIME_STEPS = 0.5
+
+    def set_sensitivity(self, value):
+        self.sensitivity = value
+        self.set_mode(self.mode)
 
     def calc_mean(self, vals):
         sum = 0
@@ -543,6 +550,13 @@ class PedoController(Singleton):
 
     def get_weight(self):
         return self.weight
+
+    def set_sensitivity(self, value):
+        self.sensitivity = value
+        self.pedometerInterval.set_sensitivity(value)
+
+    def get_sensitivity(self):
+        return self.sensitivity
 
     def set_second_view(self, second_view):
         self.second_view = second_view
@@ -1097,6 +1111,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
     weight = 70
     unit = 0
     aspect = 0
+    sensitivity = 100
     second_view = 0
     graph_view = 0
     no_idle_time = False
@@ -1114,6 +1129,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         self.height = self.client.get_int(HEIGHT)
         self.weight = self.client.get_int(WEIGHT)
         self.unit = self.client.get_int(UNIT)
+        self.sensitivity = self.client.get_int(SENSITIVITY)
         self.aspect = self.client.get_int(ASPECT)
         self.second_view = self.client.get_int(SECONDVIEW)
         self.graph_view = self.client.get_int(GRAPHVIEW)
@@ -1125,6 +1141,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         self.controller.set_weight(self.weight)
         self.controller.set_mode(self.mode)
         self.controller.set_unit(self.unit)
+        self.controller.set_sensitivity(self.sensitivity)
         self.controller.set_second_view(self.second_view)
         self.controller.set_callback_ui(self.update_values)
         self.controller.set_no_idle_time(self.no_idle_time)
@@ -1460,7 +1477,6 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             dialog.destroy()
 
         def sensitivity_dialog(button):
-
             def seekbar_changed(seekbar):
                 label.set_text(str(seekbar.get_position()) + " %")
 
@@ -1469,12 +1485,12 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             seekbar = hildon.Seekbar()
             seekbar.set_size_request(400, -1)
             seekbar.set_total_time(200)
-            seekbar.set_position(100)
+            seekbar.set_position(self.controller.get_sensitivity())
             seekbar.connect("value-changed", seekbar_changed)
 
             hbox = gtk.HBox()
             hbox.add(seekbar)
-            label = gtk.Label("100 %")
+            label = gtk.Label(str(self.controller.get_sensitivity()) + " %")
             label.set_size_request(30, -1)
             hbox.add(label)
 
@@ -1482,8 +1498,11 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             dialog.show_all()
 
             if dialog.run() == gtk.RESPONSE_OK:
-                #save new value for sensitivity
-                pass
+                value = seekbar.get_position()
+                self.client.set_int(SENSITIVITY, value)
+                self.controller.set_sensitivity(value)
+                widget.sensitivity = value
+                button.set_value(str(self.controller.get_sensitivity()) + " %")
 
             dialog.destroy()
 
@@ -1587,6 +1606,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         sensitivityButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         sensitivityButton.set_title("Sensitivity")
         sensitivityButton.set_alignment(0, 0.8, 1, 1)
+        sensitivityButton.set_value(str(self.controller.get_sensitivity()) + " %")
         sensitivityButton.connect("clicked", sensitivity_dialog)
 
         logButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
