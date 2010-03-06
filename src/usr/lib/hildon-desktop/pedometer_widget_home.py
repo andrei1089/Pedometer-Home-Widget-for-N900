@@ -1406,6 +1406,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
                 self.heightPicker_English.show()
                 self.heightPicker.hide()
 
+            update_weight_button()
 
         def selectorUI_changed(selector, data):
             widget.aspect = selectorUI.get_active(0)
@@ -1420,6 +1421,10 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             widget.no_idle_time = idleButton.get_active()
             widget.client.set_bool(NOIDLETIME, widget.no_idle_time)
             widget.controller.set_no_idle_time(widget.no_idle_time)
+
+        def update_weight_button():
+            weightButton.set_value(str(self.controller.get_weight()) + \
+                                           " " + self.controller.get_str_weight_unit() )
 
         def weight_dialog(button):
             dialog = gtk.Dialog("Weight", self.dialog)
@@ -1448,8 +1453,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
                         raise ValueError
                     self.controller.set_weight(value)
                     self.client.set_int(WEIGHT, value)
-                    weightButton.set_value(str(self.controller.get_weight()) + \
-                                           " " + self.controller.get_str_weight_unit() )
+                    update_weight_button()
                     break
                 except:
                     hildon.hildon_banner_show_information(self, "None", "Invalid weight")
