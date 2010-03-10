@@ -398,7 +398,9 @@ class PedoRepositoryPickle(PedoRepository):
 class PedoController(Singleton):
     mode = 0
     unit = 0
+    weight = 70
     height_interval = 0
+    sensitivity = 100
     #what to display in second view - 0 - alltime, 1 - today, 2 - week
     second_view = 0
     callback_update_ui = None
@@ -417,6 +419,7 @@ class PedoController(Singleton):
     midnight_source_id = None
 
     def __init__(self):
+
         self.pedometer = PedoCounter(self.steps_detected)
         self.pedometerInterval = PedoIntervalCounter()
         self.pedometerInterval.set_mode(self.mode)
@@ -428,6 +431,9 @@ class PedoController(Singleton):
         if not self.midnight_set:
             self.update_at_midnight()
             self.midnight_set = True
+
+        self.config = Config()
+        self.config.add_observer(self.load_config)
 
     def update_at_midnight(self):
         next_day = date.today() + timedelta(days=1)
@@ -447,6 +453,15 @@ class PedoController(Singleton):
             return False
         else:
             return True
+
+    def load_config(self):
+        self.set_height(self.config.get_height(), self.config.get_step_length())
+        self.set_mode(self.config.get_mode())
+        self.set_unit(self.config.get_unit())
+        self.set_weight(self.config.get_weight())
+        self.set_second_view(self.config.get_secondview())
+        self.set_no_idle_time(self.config.get_noidletime())
+        self.set_sensitivity(self.config.get_sensitivity())
 
     def load_values(self):
         if self.second_view == 0:
@@ -539,8 +554,10 @@ class PedoController(Singleton):
         unit = new_unit
         self.notify()
 
-    def get_str_weight_unit(self):
-        if self.unit == 0:
+    def get_str_weight_unit(self, unit=None):
+        if unit is None:
+            unit = self.unit
+        if unit == 0:
             return "kg"
         else:
             return "lb"
@@ -569,6 +586,7 @@ class PedoController(Singleton):
 
     def set_height(self, height_interval, step_length=None):
         self.height_interval = height_interval
+
         if step_length is None:
             step_length = self.STEP_LENGTH
         #set height, will affect the distance
@@ -625,11 +643,8 @@ class AlarmController(Singleton):
 
     def __init__(self):
         self.client = gconf.client_get_default()
-
-        self.enable = self.client.get_bool(ALARM_ENABLE)
-        self.fname = self.client.get_string(ALARM_FNAME)
-        self.interval = self.client.get_int(ALARM_INTERVAL)
-        self.type = self.client.get_int(ALARM_TYPE)
+        self.config = Config()
+        self.config.add_observer(self.load_config)
 
         self.pedo_controller = PedoController()
         if self.enable:
@@ -680,11 +695,17 @@ class AlarmController(Singleton):
             self.is_playing = True
 
     def stop(self):
-        self.player.set_state(gst.STATE_NULL)
+        if self.player is not None:
+            self.player.set_state(gst.STATE_NULL)
+
+    def load_config(self):
+        self.enable  = self.config.get_alarm_enable()
+        self.set_alarm_file(self.config.get_alarm_fname())
+        self.set_interval(self.config.get_alarm_interval())
+        self.set_type(self.config.get_alarm_type())
 
     def set_enable(self, value):
        self.enable = value
-       self.client.set_bool(ALARM_ENABLE, value)
        if self.enable:
            self.init_player()
            self.pedo_controller.add_observer(self.update)
@@ -699,7 +720,6 @@ class AlarmController(Singleton):
 
     def set_alarm_file(self, fname):
         self.fname = fname
-        self.client.set_string(ALARM_FNAME, fname)
 
     def get_alarm_file(self):
         if self.fname == None:
@@ -708,14 +728,12 @@ class AlarmController(Singleton):
 
     def set_interval(self, interval):
         self.interval = interval
-        self.client.set_int(ALARM_INTERVAL, interval)
 
     def get_interval(self):
         return self.interval
 
     def set_type(self, type):
         self.type = type
-        self.client.set_int(ALARM_TYPE, type)
 
     def get_type(self):
         return self.type
@@ -878,10 +896,18 @@ class GraphController(Singleton):
     ytitles = ["Steps", "Average Speed", "Distance", "Calories"]
     xtitles = ["Day", "Week"] # "Today"]
     widget = None
+
+    config = None
+
     def __init__(self):
         self.repository = PedoRepositoryXML()
         self.last_update = 0
         PedoController().add_observer(self.update_ui)
+        self.config = Config()
+        self.config.add_observer(self.load_config)
+
+    def load_config(self):
+        self.set_current_view(self.config.get_graphview())
 
     def set_graph(self, widget):
         self.widget = widget
@@ -892,17 +918,15 @@ class GraphController(Singleton):
         current_view % len(ytitles) - gives the ytitle
         current_view / len(ytitles) - gives the xtitle
         """
-        self.current_view = view
-
-        if self.current_view == len(self.ytitles) * len(self.xtitles):
-            self.current_view = 0
-        self.x_id = self.current_view / len(self.ytitles)
-        self.y_id = self.current_view % len(self.ytitles)
+        self.x_id = view / len(self.ytitles)
+        self.y_id = view % len(self.ytitles)
+        self.update_ui()
 
     def next_view(self):
-        self.set_current_view(self.current_view+1)
-        self.update_ui()
-        return self.current_view
+        current_view = self.config.get_graphview() + 1
+        if current_view == len(self.ytitles) * len(self.xtitles):
+            current_view = 0
+        self.config.set_graphview(current_view)
 
     def last_weeks_labels(self):
         d = date.today()
@@ -1094,6 +1118,144 @@ class GraphWidget(gtk.DrawingArea):
             cr.move_to(-xx, yy + bar_width*1.25 / 2)
             cr.show_text(self.xtext[i])
 
+class Config(Singleton):
+    mode = 0
+    height = 0
+    step_length = 0.7
+    weight = 70
+    sensitivity = 100
+    unit = 0
+    aspect = 0
+    sensitivity = 100
+    second_view = 0
+    graph_view = 0
+    no_idle_time = False
+    logging = False
+
+    alarm_enable = False
+    alarm_fname = "/home/user/MyDocs/.sounds/Ringtones/Bicycle.aac"
+    alarm_interval = 5
+    alarm_type = 0
+
+    observers = []
+
+    def __init__(self):
+        self.client = gconf.client_get_default()
+        self.client.add_dir('/apps/pedometerhomewidget', gconf.CLIENT_PRELOAD_NONE)
+        self.notify_id = self.client.notify_add('/apps/pedometerhomewidget', self.gconf_changed)
+
+    def add_observer(self, func):
+        try:
+            self.observers.index(func)
+        except:
+            self.observers.append(func)
+            func()
+
+    def remove_observer(self, func):
+        self.observers.remove(func)
+
+    def gconf_changed(self, client, *args, **kargs):
+        self.notify()
+
+    def notify(self):
+        for func in self.observers:
+            func()
+
+    def get_mode(self):
+        return self.client.get_int(MODE)
+
+    def set_mode(self, value):
+        self.client.set_int(MODE, value)
+
+    def get_height(self):
+        return self.client.get_int(HEIGHT)
+
+    def set_height(self, value):
+        self.client.set_int(HEIGHT, value)
+
+    def get_step_length(self):
+        return self.client.get_float(STEP_LENGTH)
+
+    def set_step_length(self, value):
+        self.client.set_float(STEP_LENGTH, value)
+
+    def get_weight(self):
+        return self.client.get_int(WEIGHT)
+
+    def set_weight(self, value):
+        self.client.set_int(WEIGHT, value)
+
+    def get_sensitivity(self):
+        return self.client.get_int(SENSITIVITY)
+
+    def set_sensitivity(self, value):
+        self.client.set_int(SENSITIVITY, value)
+
+    def get_unit(self):
+        return self.client.get_int(UNIT)
+
+    def set_unit(self, value):
+        self.client.set_int(UNIT, value)
+
+    def get_aspect(self):
+        return self.client.get_int(ASPECT)
+
+    def set_aspect(self, value):
+        self.client.set_int(ASPECT, value)
+
+    def get_secondview(self):
+        value = self.client.get_int(SECONDVIEW)
+        if value < 0 or value > 2:
+            value = 0
+            logger.error("Invalid secondview value read from Gconf. Using default value")
+
+        return value
+
+    def set_secondview(self, value):
+        self.client.set_int(SECONDVIEW, value)
+
+    def get_graphview(self):
+        return self.client.get_int(GRAPHVIEW)
+
+    def set_graphview(self, value):
+        self.client.set_int(GRAPHVIEW, value)
+
+    def get_noidletime(self):
+        return self.client.get_bool(NOIDLETIME)
+
+    def set_noidletime(self, value):
+        self.client.set_bool(NOIDLETIME, value)
+
+    def get_logging(self):
+        return self.client.get_bool(LOGGING)
+
+    def set_logging(self, value):
+        self.client.set_bool(LOGGING, value)
+
+    def get_alarm_enable(self):
+        return self.client.get_bool(ALARM_ENABLE)
+
+    def set_alarm_enable(self, value):
+        self.client.set_bool(ALARM_ENABLE, value)
+
+    def get_alarm_fname(self):
+        return self.client.get_string(ALARM_FNAME)
+
+    def set_alarm_fname(self, value):
+        self.client.set_string(ALARM_FNAME, value)
+
+    def get_alarm_interval(self):
+        return self.client.get_int(ALARM_INTERVAL)
+
+    def set_alarrm_interval(self, value):
+        self.client.set_int(ALARM_INTERVAL, value)
+
+    def get_alarm_type(self):
+        return self.client.get_int(ALARM_TYPE)
+
+    def set_alarm_type(self, value):
+        self.client.set_int(ALARM_TYPE, value)
+
 class PedometerHomePlugin(hildondesktop.HomePluginItem):
     button = None
 
@@ -1111,16 +1273,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
     controller = None
     graph_controller = None
 
-    mode = 0
-    height = 0
-    weight = 70
-    unit = 0
-    aspect = 0
-    sensitivity = 100
-    second_view = 0
-    graph_view = 0
-    no_idle_time = False
-    logging = False
+    config = None
 
     def __init__(self):
         hildondesktop.HomePluginItem.__init__(self)
@@ -1128,41 +1281,20 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         gobject.type_register(CustomEventBox)
         gobject.type_register(GraphWidget)
 
-        self.client = gconf.client_get_default()
-
-        self.mode = self.client.get_int(MODE)
-        self.height = self.client.get_int(HEIGHT)
-        self.step_length = self.client.get_float(STEP_LENGTH)
-        self.weight = self.client.get_int(WEIGHT)
-        self.unit = self.client.get_int(UNIT)
-        self.sensitivity = self.client.get_int(SENSITIVITY)
-        self.aspect = self.client.get_int(ASPECT)
-        self.second_view = self.client.get_int(SECONDVIEW)
-        self.graph_view = self.client.get_int(GRAPHVIEW)
-        self.no_idle_time = self.client.get_bool(NOIDLETIME)
-        self.logging = self.client.get_bool(LOGGING)
-
-        self.controller = PedoController()
-        self.controller.set_height(self.height, self.step_length)
-        self.controller.set_weight(self.weight)
-        self.controller.set_mode(self.mode)
-        self.controller.set_unit(self.unit)
-        self.controller.set_sensitivity(self.sensitivity)
-        self.controller.set_second_view(self.second_view)
-        self.controller.set_callback_ui(self.update_values)
-        self.controller.set_no_idle_time(self.no_idle_time)
-
-        self.graph_controller = GraphController()
-        self.graph_controller.set_current_view(self.graph_view)
-
-        self.alarm_controller = AlarmController()
+        self.config = Config()
 
         self.button = CustomButton(ICONSPATH + "play.png")
         self.button.connect("clicked", self.button_clicked)
 
         self.create_labels(self.labelsC)
         self.create_labels(self.labelsT)
-        self.label_second_view = self.new_label_heading(self.second_view_labels[self.second_view])
+        self.label_second_view = self.new_label_heading(self.second_view_labels[self.config.get_secondview()])
+
+        self.controller = PedoController()
+        self.controller.set_callback_ui(self.update_values)
+
+        self.graph_controller = GraphController()
+        self.alarm_controller = AlarmController()
 
         self.update_current()
         self.update_total()
@@ -1240,9 +1372,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         widget.set_state(gtk.STATE_ACTIVE)
 
     def eventBoxGraph_clicked_release(self, widget, data=None):
-        self.graph_view = self.graph_controller.next_view()
-        self.client.set_int(GRAPHVIEW, self.graph_view)
-
+        self.graph_controller.next_view()
         widget.set_state(gtk.STATE_NORMAL)
 
     def eventBox_clicked(self, widget, data=None):
@@ -1251,9 +1381,9 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
     def eventBox_clicked_release(self, widget, data=None):
         widget.set_state(gtk.STATE_NORMAL)
 
-        self.second_view = (self.second_view + 1) % 3
-        self.controller.set_second_view(self.second_view)
-        self.client.set_int(SECONDVIEW, self.second_view)
+        second_view = self.config.get_secondview()
+        second_view = (second_view + 1) % 3
+        self.config.set_secondview(second_view)
 
     def new_label_heading(self, title=""):
         l = gtk.Label(title)
@@ -1268,16 +1398,16 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             new_labels[label] = l
 
     def update_aspect(self):
-
-        if self.aspect > 0:
+        aspect = self.config.get_aspect()
+        if aspect > 0:
             self.graphBox.hide_all()
         else:
             self.graphBox.show_all()
 
-        if self.aspect == 0 or self.aspect == 1:
+        if aspect == 0 or aspect == 1:
             self.currentBox.show_all()
             self.totalBox.show_all()
-        elif self.aspect == 2:
+        elif aspect == 2:
             self.currentBox.show_all()
             self.totalBox.hide_all()
         else:
@@ -1307,7 +1437,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             if ( file.run() == gtk.RESPONSE_OK):
                 fname = file.get_filename()
                 widget.set_value(fname)
-                self.alarm_controller.set_alarm_file(fname)
+                self.config.set_alarm_fname(fname)
             file.destroy()
 
         def test_sound(button):
@@ -1319,15 +1449,16 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         def enableButton_changed(button):
             value = button.get_active()
-            self.alarm_controller.set_enable(value)
+            self.config.set_alarm_enable(value)
             if value:
                 main_button.set_value("Enabled")
             else:
                 main_button.set_value("Disabled")
 
         def selectorType_changed(selector, data, labelEntry2):
-            self.alarm_controller.set_type(selector.get_active(0))
-            labelEntry2.set_label(suffix[self.alarm_controller.get_type()])
+            type = selector.get_active(0)
+            self.config.set_alarm_type(type)
+            labelEntry2.set_label(suffix[type])
 
         dialog = gtk.Dialog()
         dialog.set_title("Alarm settings")
@@ -1386,7 +1517,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
                 break
             try:
                 value = int(intervalEntry.get_text())
-                self.alarm_controller.set_interval(value)
+                self.config.set_alarrm_interval(value)
                 break
             except:
                 hildon.hildon_banner_show_information(self, "None", "Invalid interval")
@@ -1406,35 +1537,31 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             self.show_alarm_settings(widget)
 
         def selector_changed(selector, data):
-            widget.mode = selector.get_active(0)
-            widget.client.set_int(MODE, widget.mode)
-            widget.controller.set_mode(widget.mode)
+            mode = selector.get_active(0)
+            self.config.set_mode(mode)
 
         def selectorUnit_changed(selector, data):
-            widget.unit = selector.get_active(0)
-            widget.client.set_int(UNIT, widget.unit)
-            widget.controller.set_unit(widget.unit)
+            unit = selector.get_active(0)
+            self.config.set_unit(unit)
 
             update_weight_button()
             stepLengthButton_value_update()
 
         def selectorUI_changed(selector, data):
-            widget.aspect = selectorUI.get_active(0)
-            widget.client.set_int(ASPECT, widget.aspect)
+            aspect = selectorUI.get_active(0)
             widget.update_aspect()
 
         def logButton_changed(checkButton):
-            widget.logging = checkButton.get_active()
-            widget.client.set_bool(LOGGING, widget.logging)
+            logging = checkButton.get_active()
+            self.config.set_logging(logging)
 
         def idleButton_changed(idleButton):
-            widget.no_idle_time = idleButton.get_active()
-            widget.client.set_bool(NOIDLETIME, widget.no_idle_time)
-            widget.controller.set_no_idle_time(widget.no_idle_time)
+            no_idle_time = idleButton.get_active()
+            self.config.set_noidletime(no_idle_time)
 
         def update_weight_button():
-            weightButton.set_value(str(self.controller.get_weight()) + \
-                                           " " + self.controller.get_str_weight_unit() )
+            weightButton.set_value(str(self.config.get_weight()) + \
+                                           " " + self.controller.get_str_weight_unit(self.config.get_unit()) )
 
         def weight_dialog(button):
             dialog = gtk.Dialog("Weight", self.dialog)
@@ -1442,9 +1569,9 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
             label = gtk.Label("Weight:")
             entry = gtk.Entry()
-            entry.set_text(str(self.controller.get_weight()))
+            entry.set_text(str(self.config.get_weight()))
 
-            suffixLabel = gtk.Label(self.controller.get_str_weight_unit())
+            suffixLabel = gtk.Label(self.controller.get_str_weight_unit(self.config.get_unit()))
 
             hbox = gtk.HBox()
             hbox.add(label)
@@ -1461,8 +1588,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
                     value = int(entry.get_text())
                     if value <= 0:
                         raise ValueError
-                    self.controller.set_weight(value)
-                    self.client.set_int(WEIGHT, value)
+                    self.config.set_weight(value)
                     update_weight_button()
                     break
                 except:
@@ -1478,12 +1604,12 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             seekbar = hildon.Seekbar()
             seekbar.set_size_request(400, -1)
             seekbar.set_total_time(200)
-            seekbar.set_position(self.controller.get_sensitivity())
+            seekbar.set_position(self.config.get_sensitivity())
             seekbar.connect("value-changed", seekbar_changed)
 
             hbox = gtk.HBox()
             hbox.add(seekbar)
-            label = gtk.Label(str(self.controller.get_sensitivity()) + " %")
+            label = gtk.Label(str(self.config.get_sensitivity()) + " %")
             label.set_size_request(30, -1)
             hbox.add(label)
 
@@ -1492,28 +1618,25 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
             if dialog.run() == gtk.RESPONSE_OK:
                 value = seekbar.get_position()
-                self.client.set_int(SENSITIVITY, value)
-                self.controller.set_sensitivity(value)
-                widget.sensitivity = value
-                button.set_value(str(self.controller.get_sensitivity()) + " %")
+                self.config.set_sensitivity(value)
+                button.set_value(str(value) + " %")
 
             dialog.destroy()
 
         def stepLengthButton_value_update():
-            if widget.height == 5:
+            if self.config.get_height() == 5:
                 l_unit = ["m", "ft"]
-                stepLengthButton.set_value("Custom value: %.2f %s" % (widget.step_length, l_unit[widget.unit]))
+                stepLengthButton.set_value("Custom value: %.2f %s" % (self.config.get_step_length(), l_unit[self.config.get_unit()]))
             else:
                 h = [ ["< 1.50 m", "1.50 - 1.65 m", "1.66 - 1.80 m", "1.81 - 1.95 m", " > 1.95 m"],
                       ["< 5 ft", "5 - 5.5 ft", "5.5 - 6 ft", "6 - 6.5 ft", "> 6.5 ft"]]
-                str = "Using predefined value for height: %s" % h[widget.unit][widget.height]
+                str = "Using predefined value for height: %s" % h[self.config.get_unit()][self.config.get_height()]
                 stepLengthButton.set_value(str)
 
         def stepLength_dialog(button):
             def selectorH_changed(selector, data, dialog):
-                widget.height = selector.get_active(0)
-                widget.client.set_int(HEIGHT, widget.height)
-                widget.controller.set_height(widget.height)
+                height = selector.get_active(0)
+                self.config.set_height(height)
                 stepLengthButton_value_update()
 
             def manualButton_clicked(button, dialog):
@@ -1524,11 +1647,11 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
                 label = gtk.Label("Length")
 
                 entry = hildon.Entry(gtk.HILDON_SIZE_AUTO_WIDTH)
-                if widget.height == 5:
-                    entry.set_text(str(widget.step_length))
+                if self.config.get_height() == 5:
+                    entry.set_text(str(self.config.get_step_length()))
 
                 labelSuffix = gtk.Label()
-                if widget.unit == 0:
+                if self.config.get_unit() == 0:
                     labelSuffix.set_label("m")
                 else:
                     labelSuffix.set_label("ft")
@@ -1547,11 +1670,8 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
                         value = float(entry.get_text())
                         if value <= 0:
                             raise ValueError
-                        self.controller.set_height(5, value)
-                        self.client.set_int(HEIGHT, 5)
-                        self.client.set_float(STEP_LENGTH, value)
-                        widget.height = 5
-                        widget.step_length = value
+                        self.config.set_step_length(value)
+                        self.config.set_height(5)
                         stepLengthButton_value_update()
                         break
                     except ValueError:
@@ -1590,16 +1710,17 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             heightPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
             heightPicker.set_title("Use predefined values for height")
 
-            if widget.height < 5:
-                heightPicker.set_active(widget.height)
 
-            if widget.unit == 0:
+            unit = self.config.get_unit()
+            if unit == 0:
                 heightPicker.set_selector(selectorH)
             else:
                 heightPicker.set_selector(selectorH_English)
 
-            if widget.height < 5:
-                heightPicker.set_active(widget.height)
+            height = self.config.get_height()
+            if height < 5:
+                heightPicker.set_active(height)
+
             heightPicker.get_selector().connect("changed", selectorH_changed, dialog)
             heightPicker.connect("value-changed", heightButton_clicked, dialog)
 
@@ -1633,7 +1754,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         alarmButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         alarmButton.set_title("Alarm")
-        if self.alarm_controller.get_enable():
+        if self.config.get_alarm_enable():
             alarmButton.set_value("Enabled")
         else:
             alarmButton.set_value("Disabled")
@@ -1650,13 +1771,12 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         modePicker.set_alignment(0.0, 0.5, 1.0, 1.0)
         modePicker.set_title("Mode")
         modePicker.set_selector(selector)
-        modePicker.set_active(widget.mode)
-
+        modePicker.set_active(self.config.get_mode())
 
         weightButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         weightButton.set_title("Weight")
         weightButton.set_alignment(0, 0.8, 1, 1)
-        weightButton.set_value(str(self.controller.get_weight()) + " " + self.controller.get_str_weight_unit() )
+        update_weight_button()
         weightButton.connect("clicked", weight_dialog)
 
         selectorUnit = hildon.TouchSelector(text=True)
@@ -1669,7 +1789,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         unitPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
         unitPicker.set_title("Unit")
         unitPicker.set_selector(selectorUnit)
-        unitPicker.set_active(widget.unit)
+        unitPicker.set_active(self.config.get_unit())
 
         selectorUI = hildon.TouchSelector(text=True)
         selectorUI = hildon.TouchSelector(text=True)
@@ -1684,12 +1804,12 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         UIPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
         UIPicker.set_title("Widget aspect")
         UIPicker.set_selector(selectorUI)
-        UIPicker.set_active(widget.aspect)
+        UIPicker.set_active(self.config.get_aspect())
 
         sensitivityButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         sensitivityButton.set_title("Sensitivity")
         sensitivityButton.set_alignment(0, 0.8, 1, 1)
-        sensitivityButton.set_value(str(self.controller.get_sensitivity()) + " %")
+        sensitivityButton.set_value(str(self.config.get_sensitivity()) + " %")
         sensitivityButton.connect("clicked", sensitivity_dialog)
 
         donateButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
@@ -1699,12 +1819,12 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         logButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
         logButton.set_label("Log data")
-        logButton.set_active(widget.logging)
+        logButton.set_active(self.config.get_logging())
         logButton.connect("toggled", logButton_changed)
 
         idleButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
         idleButton.set_label("Pause time when not walking")
-        idleButton.set_active(widget.no_idle_time)
+        idleButton.set_active(self.config.get_noidletime())
         idleButton.connect("toggled", idleButton_changed)
 
         pan_area = hildon.PannableArea()
@@ -1737,7 +1857,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
     def update_values(self):
         #TODO: do not update if the widget is not on the active desktop
-        self.label_second_view.set_label(self.second_view_labels[self.second_view])
+        self.label_second_view.set_label(self.second_view_labels[self.config.get_secondview()])
         self.update_current()
         self.update_total()
 
