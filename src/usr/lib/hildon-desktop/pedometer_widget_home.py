@@ -57,7 +57,9 @@ unit = 0
 
 class Singleton(object):
     _instance = None
+    _references = 0
     def __new__(cls, *args, **kwargs):
+        cls._references+=1
         if not cls._instance:
             cls._instance = super(Singleton, cls).__new__(
                                 cls, *args, **kwargs)
@@ -1140,6 +1142,8 @@ class Config(Singleton):
     observers = []
 
     def __init__(self):
+        if self._references > 1:
+            return
         self.client = gconf.client_get_default()
         self.client.add_dir('/apps/pedometerhomewidget', gconf.CLIENT_PRELOAD_NONE)
         self.notify_id = self.client.notify_add('/apps/pedometerhomewidget', self.gconf_changed)
