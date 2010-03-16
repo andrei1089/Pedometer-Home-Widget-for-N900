@@ -1773,7 +1773,8 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         stepLengthButton_value_update()
 
         resetButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        resetButton.set_title("Reset total counter")
+        resetButton.set_title("Reset")
+        resetButton.set_value("All the stored values will be erased")
         resetButton.set_alignment(0, 0.8, 1, 1)
         resetButton.connect("clicked", reset_total_counter)
 
@@ -1839,6 +1840,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         donateButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         donateButton.set_title("Donate")
+        donateButton.set_value("Please support the development of this opensource widget!")
         donateButton.set_alignment(0, 0.8, 1, 1)
         donateButton.connect("clicked", donateButton_clicked, dialog)
 
