@@ -1145,7 +1145,7 @@ class Config(Singleton):
         if self._references > 1:
             return
         self.client = gconf.client_get_default()
-        self.client.add_dir('/apps/pedometerhomewidget', gconf.CLIENT_PRELOAD_NONE)
+        self.client.add_dir('/apps/pedometerhomewidget', gconf.CLIENT_PRELOAD_RECURSIVE)
         self.notify_id = self.client.notify_add('/apps/pedometerhomewidget', self.gconf_changed)
 
     def add_observer(self, func):
@@ -1162,8 +1162,11 @@ class Config(Singleton):
         self.notify()
 
     def notify(self):
+        t1 = time.time()
         for func in self.observers:
             func()
+        t2 = time.time()
+        logger.info("Update took: %f seconds" % (t2-t1))
 
     def get_mode(self):
         return self.client.get_int(MODE)
