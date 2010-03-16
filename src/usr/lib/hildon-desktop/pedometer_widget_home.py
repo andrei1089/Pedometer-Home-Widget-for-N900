@@ -409,8 +409,12 @@ class PedoController(Singleton):
     no_idle_time = False
 
     STEP_LENGTH = 0.7
+
+    #The interval(number of steps) between two file updates
+    BUFFER_STEPS_INTERVAL = 100
     #values for the two views in the widget ( current and day/week/alltime)
-    v = [PedoValues(), PedoValues()]
+    #third value to count the steps that were not yet written to file
+    v = [PedoValues(), PedoValues(), PedoValues()]
 
     last_time = 0
     is_running = False
@@ -474,12 +478,14 @@ class PedoController(Singleton):
             self.v[1] = self.repository.get_this_week_values()
 
     def save_values(self):
-        self.repository.add_values(self.v[0])
+        logger.info("Saving values to file")
+        self.repository.add_values(self.v[2])
         self.repository.save()
         self.load_values()
 
     def start_pedometer(self):
         self.v[0] = PedoValues()
+        self.v[2] = PedoValues()
         self.last_time = time.time()
         self.is_running = True
         self.pedometer.start()
@@ -489,6 +495,7 @@ class PedoController(Singleton):
         self.repository.reset_values()
         self.v[0] = PedoValues()
         self.v[1] = PedoValues()
+        self.v[2] = PedoValues()
         self.notify()
 
     def stop_pedometer(self):
@@ -500,7 +507,7 @@ class PedoController(Singleton):
 
     def get_second(self):
         if self.is_running:
-            return self.v[0] + self.v[1]
+            return self.v[2] + self.v[1]
         else:
             return self.v[1]
 
@@ -519,6 +526,17 @@ class PedoController(Singleton):
             self.v[0].dist += self.get_distance(cnt)
             self.v[0].calories += self.get_calories(self.get_distance(cnt))
             self.v[0].time += time.time() - self.last_time
+
+            self.v[2].steps += cnt
+            self.v[2].dist += self.get_distance(cnt)
+            self.v[2].calories += self.get_calories(self.get_distance(cnt))
+            self.v[2].time += time.time() - self.last_time
+
+            if not last_steps and self.v[2].steps > self.BUFFER_STEPS_INTERVAL:
+                self.save_values()
+                self.notify()
+                self.v[2] = PedoValues()
+
             if last_steps:
                 self.save_values()
                 self.notify()
