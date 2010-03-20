@@ -423,6 +423,7 @@ class PedoController(Singleton):
 
     midnight_set = False
     midnight_source_id = None
+    midnight_before_source_id = None
 
     def __init__(self):
 
@@ -443,15 +444,31 @@ class PedoController(Singleton):
 
     def update_at_midnight(self):
         next_day = date.today() + timedelta(days=1)
-        diff = time.mktime(next_day.timetuple()) - time.time()
-        diff = int(diff+5)
-        self.midnight_source_id = gobject.timeout_add_seconds(diff, self.midnight_callback, True)
+        diff = int(time.mktime(next_day.timetuple()) - time.time())
+        diff_before = diff - 5
+        diff_after = diff + 5
+        self.midnight_source_id = gobject.timeout_add_seconds(diff_after, self.midnight_callback, True)
+        self.midnight_before_source_id = gobject.timeout_add_seconds(diff_before, self.midnight_before_callback, True)
 
     def stop_midnight_callback(self):
         if self.midnight_source_id is not None:
             gobject.source_remove(self.midnight_source_id)
+        if self.midnight_before_source_id is not None:
+            gobject.source_remove(self.midnight_before_source_id)
+
+    def midnight_before_callback(self, first=False):
+        logger.info("Before midnight callback")
+        if self.is_running:
+            self.stop_pedometer()
+            self.start_pedometer()
+        if first:
+            self.midnight_before_source_id = gobject.timeout_add_seconds(24*3600, self.midnight_before_callback)
+            return False
+        else:
+            return True
 
     def midnight_callback(self, first=False):
+        logger.info("Midnight callback")
         self.load_values()
         self.notify()
         if first:
