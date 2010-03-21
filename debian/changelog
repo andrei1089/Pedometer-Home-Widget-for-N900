@@ -1,0 +1,20 @@
+pedometerhomewidget (0.3-3) stable; urgency=low
+
+  * Fix bug #5407: Count steps correctly if the counter is running
+    overnight
+
+ -- Andrei Mirestean <andrei.mirestean@gmail.com>  Sun, 21 Mar 2010 14:20:10 +0200
+
+pedometerhomewidget (0.3-2) stable; urgency=low
+
+  New features:
+  *fixed Imperial units bug
+  *option to set sensitivity
+  *options to set step length
+  *calculate number of lost calories
+  *show graphs of steps/distance/calories
+  *save history in XML file
+  *set alarm for steps/calories/distance
+  *option to pause timer when not walking
+
+ -- Andrei Mirestean <andrei.mirestean@gmail.com>  Wed, 17 Mar 2010 00:40:09 +0000
