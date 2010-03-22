@@ -41,7 +41,7 @@ if __name__ == "__main__":
     #  p.preremove="""#!/bin/sh
     #  chmod +x /usr/bin/mclock.py""" #Set here your pre remove script
     version = "0.3"           #Version of your software, e.g. "1.2.0" or "0.8.2"
-    build = "3"                 #Build number, e.g. "1" for the first build of this version of your software. Increment for later re-builds of the same version of your software.
+    build = "4"                 #Build number, e.g. "1" for the first build of this version of your software. Increment for later re-builds of the same version of your software.
     #Text with changelog information to be displayed in the package "Details" tab of the Maemo Application Manager
     #changeloginformation ="New features: \n*fixed Imperial units bug\n*option to set sensitivity\n*options to set step length\n*calculate number of lost calories\n*show graphs of steps/distance/calories\n*save history in XML file\n*set alarm for steps/calories/distance\n*option to pause timer when not walking"
     changeloginformation = open("debian/changelog").read()
