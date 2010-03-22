@@ -24,6 +24,8 @@ import gobject
 import gconf
 import gtk
 import cairo
+import locale
+import gettext
 
 import pygst
 pygst.require("0.10")
@@ -31,6 +33,8 @@ import gst
 
 import hildondesktop
 import hildon
+
+APP_NAME = "pedometer"
 
 PATH = "/apps/pedometerhomewidget"
 MODE = PATH + "/mode"
@@ -64,6 +68,49 @@ class Singleton(object):
             cls._instance = super(Singleton, cls).__new__(
                                 cls, *args, **kwargs)
         return cls._instance
+
+class Translate(Singleton):
+
+    def __init__(self):
+        if self._references > 1:
+            return
+        #Get the local directory since we are not installing anything
+        #self.local_path = os.path.realpath(os.path.dirname(sys.argv[0]))
+        self.local_path = os.path.join(os.path.expanduser("~"), "pedometer-widget-0.1", "locale")
+        # Init the list of languages to support
+        langs = []
+        #Check the default locale
+        lc, encoding = locale.getdefaultlocale()
+        if (lc):
+            #If we have a default, it's the first in the list
+            langs = [lc]
+        # Now lets get all of the supported languages on the system
+        language = os.environ.get('LANGUAGE', None)
+        if (language):
+            """langage comes back something like en_CA:en_US:en_GB:en
+            on linuxy systems, on Win32 it's nothing, so we need to
+            split it up into a list"""
+            langs += language.split(":")
+        """Now add on to the back of the list the translations that we
+        know that we have, our defaults"""
+        langs += ["en_CA", "en_US", "ro_RO"]
+
+        """Now langs is a list of all of the languages that we are going
+        to try to use.  First we check the default, then what the system
+        told us, and finally the 'known' list"""
+
+        gettext.bindtextdomain(APP_NAME, self.local_path)
+        print self.local_path
+        print langs
+        gettext.textdomain(APP_NAME)
+        # Get the language to use
+        self.lang = gettext.translation(APP_NAME, self.local_path
+            , languages=langs, fallback = True)
+        """Install the language, map _() (which we marked our
+        strings to translate with) to self.lang.gettext() which will
+        translate them."""
+
+_ = Translate().lang.gettext
 
 class PedoIntervalCounter(Singleton):
     MIN_THRESHOLD = 500
@@ -930,8 +977,8 @@ class CustomEventBox(gtk.EventBox):
         gtk.EventBox.do_expose_event(self, event)
 
 class GraphController(Singleton):
-    ytitles = ["Steps", "Average Speed", "Distance", "Calories"]
-    xtitles = ["Day", "Week"] # "Today"]
+    ytitles = [_("Steps"), _("Average Speed"), _("Distance"), _("Calories")]
+    xtitles = [_("Day"), _("Week")] # "Today"]
     widget = None
 
     config = None
@@ -970,7 +1017,7 @@ class GraphController(Singleton):
         delta = timedelta(days=7)
         ret = []
         for i in range(7):
-            ret.append(d.strftime("Week %W"))
+            ret.append(_("Week") + d.strftime("%W"))
             d = d - delta
         return ret
 
@@ -988,7 +1035,7 @@ class GraphController(Singleton):
             values = self.repository.get_last_weeks()
             d = date.today()
             for i in range(7):
-                labels.append(d.strftime("Week %W"))
+                labels.append(_("Week") + " " + d.strftime("%W"))
                 d = d - timedelta(days=7)
         else:
             values = self.repository.get_today()
@@ -1049,10 +1096,10 @@ class GraphWidget(gtk.DrawingArea):
 
         """sample values"""
         self.ytext = ["   0", "1000", "2000", "3000", "4000", "5000"]
-        self.xtext = ["Monday", "Tuesday", "Wednesday","Thursday", "Friday", "Saturday", "Sunday"]
+        self.xtext = [_("Monday"), _("Tuesday"), _("Wednesday"), _("Thursday"), _("Friday"), _("Saturday"), _("Sunday")]
         self.values = [1500, 3400, 4000, 3600, 3200, 0, 4500]
         self.max_value = 5000
-        self.text = "All time steps"
+        self.text = _("All time steps")
 
     def do_expose_event(self, event):
         context = self.window.cairo_create()
@@ -1298,6 +1345,7 @@ class Config(Singleton):
     def set_alarm_type(self, value):
         self.client.set_int(ALARM_TYPE, value)
 
+
 class PedometerHomePlugin(hildondesktop.HomePluginItem):
     button = None
 
@@ -1310,7 +1358,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
     #second view ( day / week/ alltime)
     labelsT = {}
 
-    second_view_labels = ["All-time", "Today", "This week"]
+    second_view_labels = [_("All-time"), _("Today"), _("This week")]
 
     controller = None
     graph_controller = None
@@ -1320,8 +1368,12 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
     def __init__(self):
         hildondesktop.HomePluginItem.__init__(self)
 
+        print "!!!!!!!!!!!!!!!Pedometer init"
         gobject.type_register(CustomEventBox)
         gobject.type_register(GraphWidget)
+
+        #global _
+        #_ = Translate()._
 
         self.config = Config()
 
@@ -1345,14 +1397,14 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         descVBox = gtk.VBox(spacing=1)
         descVBox.add(self.new_label_heading())
-        descVBox.add(self.new_label_heading("Time:"))
-        descVBox.add(self.new_label_heading("Steps:"))
-        descVBox.add(self.new_label_heading("Calories:"))
-        descVBox.add(self.new_label_heading("Distance:"))
-        descVBox.add(self.new_label_heading("Avg Speed:"))
+        descVBox.add(self.new_label_heading(_("Time") + ":"))
+        descVBox.add(self.new_label_heading(_("Steps") + ":"))
+        descVBox.add(self.new_label_heading(_("Calories") + ":"))
+        descVBox.add(self.new_label_heading(_("Distance") + ":"))
+        descVBox.add(self.new_label_heading(_("Avg Speed") + ":"))
 
         currentVBox = gtk.VBox(spacing=1)
-        currentVBox.add(self.new_label_heading("Current"))
+        currentVBox.add(self.new_label_heading(_("Current")))
         currentVBox.add(self.labelsC["timer"])
         currentVBox.add(self.labelsC["count"])
         currentVBox.add(self.labelsC["calories"])
@@ -1503,42 +1555,42 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             labelEntry2.set_label(suffix[type])
 
         dialog = gtk.Dialog()
-        dialog.set_title("Alarm settings")
-        dialog.add_button("OK", gtk.RESPONSE_OK)
+        dialog.set_title(_("Alarm settings"))
+        dialog.add_button(_("OK"), gtk.RESPONSE_OK)
 
         enableButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
-        enableButton.set_label("Enable alarm")
+        enableButton.set_label(_("Enable alarm"))
         enableButton.set_active(self.alarm_controller.get_enable())
         enableButton.connect("toggled", enableButton_changed)
 
         testButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         testButton.set_alignment(0, 0.8, 1, 1)
-        testButton.set_title("Test sound")
+        testButton.set_title(_("Test sound"))
         testButton.connect("pressed", test_sound)
 
         fileButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         fileButton.set_alignment(0, 0.8, 1, 1)
-        fileButton.set_title("Alarm sound")
+        fileButton.set_title(_("Alarm sound"))
         fileButton.set_value(self.alarm_controller.get_alarm_file())
         fileButton.connect("pressed", choose_file)
 
-        labelEntry = gtk.Label("Notify every:")
-        suffix = ["mins", "steps", "m/ft", "calories"]
+        labelEntry = gtk.Label(_("Notify every") + ":")
+        suffix = [_("mins"), _("steps"), _("m/ft"), _("calories")]
         labelEntry2 = gtk.Label(suffix[self.alarm_controller.get_type()])
         intervalEntry = hildon.Entry(gtk.HILDON_SIZE_AUTO_WIDTH)
         intervalEntry.set_text(str(self.alarm_controller.get_interval()))
 
         selectorType = hildon.TouchSelector(text=True)
         selectorType.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
-        selectorType.append_text("Time")
-        selectorType.append_text("Steps")
-        selectorType.append_text("Distance")
-        selectorType.append_text("Calories")
+        selectorType.append_text(_("Time"))
+        selectorType.append_text(_("Steps"))
+        selectorType.append_text(_("Distance"))
+        selectorType.append_text(_("Calories"))
         selectorType.connect("changed", selectorType_changed, labelEntry2)
 
         typePicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         typePicker.set_alignment(0.0, 0.5, 1.0, 1.0)
-        typePicker.set_title("Alarm type")
+        typePicker.set_title(_("Alarm type"))
         typePicker.set_selector(selectorType)
         typePicker.set_active(self.alarm_controller.get_type())
 
@@ -1562,17 +1614,17 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
                 self.config.set_alarrm_interval(value)
                 break
             except:
-                hildon.hildon_banner_show_information(self, "None", "Invalid interval")
+                hildon.hildon_banner_show_information(self, "None", _("Invalid interval"))
 
         dialog.destroy()
 
     def show_settings(self, widget):
         def reset_total_counter(arg):
-            note = hildon.hildon_note_new_confirmation(self.dialog, "Are you sure you want to delete all your pedometer history?")
+            note = hildon.hildon_note_new_confirmation(self.dialog, _("Are you sure you want to delete all your pedometer history?"))
             ret = note.run()
             if ret == gtk.RESPONSE_OK:
                 self.controller.reset_all_values()
-                hildon.hildon_banner_show_information(self, "None", "All history was deleted")
+                hildon.hildon_banner_show_information(self, "None", _("All history was deleted"))
             note.destroy()
 
         def alarmButton_pressed(widget):
@@ -1606,10 +1658,10 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
                                            " " + self.controller.get_str_weight_unit(self.config.get_unit()) )
 
         def weight_dialog(button):
-            dialog = gtk.Dialog("Weight", self.dialog)
-            dialog.add_button("OK", gtk.RESPONSE_OK)
+            dialog = gtk.Dialog(_("Weight"), self.dialog)
+            dialog.add_button(_("OK"), gtk.RESPONSE_OK)
 
-            label = gtk.Label("Weight:")
+            label = gtk.Label(_("Weight") + ":")
             entry = gtk.Entry()
             entry.set_text(str(self.config.get_weight()))
 
@@ -1634,15 +1686,15 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
                     update_weight_button()
                     break
                 except:
-                    hildon.hildon_banner_show_information(self, "None", "Invalid weight")
+                    hildon.hildon_banner_show_information(self, "None", _("Invalid weight"))
             dialog.destroy()
 
         def sensitivity_dialog(button):
             def seekbar_changed(seekbar):
                 label.set_text(str(seekbar.get_position()) + " %")
 
-            dialog = gtk.Dialog("Sensitivity", self.dialog)
-            dialog.add_button("OK", gtk.RESPONSE_OK)
+            dialog = gtk.Dialog(_("Sensitivity"), self.dialog)
+            dialog.add_button(_("OK"), gtk.RESPONSE_OK)
             seekbar = hildon.Seekbar()
             seekbar.set_size_request(400, -1)
             seekbar.set_total_time(200)
@@ -1668,11 +1720,11 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         def stepLengthButton_value_update():
             if self.config.get_height() == 5:
                 l_unit = ["m", "ft"]
-                stepLengthButton.set_value("Custom value: %.2f %s" % (self.config.get_step_length(), l_unit[self.config.get_unit()]))
+                stepLengthButton.set_value(_("Custom value") + ": %.2f %s" % (self.config.get_step_length(), l_unit[self.config.get_unit()]))
             else:
                 h = [ ["< 1.50 m", "1.50 - 1.65 m", "1.66 - 1.80 m", "1.81 - 1.95 m", " > 1.95 m"],
                       ["< 5 ft", "5 - 5.5 ft", "5.5 - 6 ft", "6 - 6.5 ft", "> 6.5 ft"]]
-                str = "Using predefined value for height: %s" % h[self.config.get_unit()][self.config.get_height()]
+                str = _("Using predefined value for height") + ": %s" % h[self.config.get_unit()][self.config.get_height()]
                 stepLengthButton.set_value(str)
 
         def stepLength_dialog(button):
@@ -1683,10 +1735,10 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
             def manualButton_clicked(button, dialog):
                 dlg = gtk.Dialog()
-                dlg.set_title("Custom step length")
-                dlg.add_button("OK", gtk.RESPONSE_OK)
+                dlg.set_title(_("Custom step length"))
+                dlg.add_button(_("OK"), gtk.RESPONSE_OK)
 
-                label = gtk.Label("Length")
+                label = gtk.Label(_("Length"))
 
                 entry = hildon.Entry(gtk.HILDON_SIZE_AUTO_WIDTH)
                 if self.config.get_height() == 5:
@@ -1717,7 +1769,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
                         stepLengthButton_value_update()
                         break
                     except ValueError:
-                        hildon.hildon_banner_show_information(self, "None", "Invalid length")
+                        hildon.hildon_banner_show_information(self, "None", _("Invalid length"))
                 dlg.destroy()
                 dialog.destroy()
 
@@ -1725,10 +1777,10 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
                 dialog.destroy()
 
             dialog = gtk.Dialog()
-            dialog.set_title("Step length")
+            dialog.set_title(_("Step length"))
 
             manualButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-            manualButton.set_title("Enter custom value")
+            manualButton.set_title(_("Enter custom value"))
             manualButton.set_alignment(0, 0.8, 1, 1)
             manualButton.connect("clicked", manualButton_clicked, dialog)
 
@@ -1750,7 +1802,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
             heightPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
             heightPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
-            heightPicker.set_title("Use predefined values for height")
+            heightPicker.set_title(_("Use predefined values for height"))
 
 
             unit = self.config.get_unit()
@@ -1779,95 +1831,95 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
             os.system(command)
 
         dialog = gtk.Dialog()
-        dialog.set_title("Settings")
-        dialog.add_button("OK", gtk.RESPONSE_OK)
+        dialog.set_title(_("Settings"))
+        dialog.add_button(_("OK"), gtk.RESPONSE_OK)
         self.dialog = dialog
 
         stepLengthButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        stepLengthButton.set_title("Step length")
+        stepLengthButton.set_title(_("Step length"))
         stepLengthButton.set_alignment(0, 0.8, 1, 1)
         stepLengthButton.connect("clicked", stepLength_dialog)
         stepLengthButton_value_update()
 
         resetButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        resetButton.set_title("Reset")
-        resetButton.set_value("All the stored values will be erased")
+        resetButton.set_title(_("Reset"))
+        resetButton.set_value(_("All the stored values will be erased"))
         resetButton.set_alignment(0, 0.8, 1, 1)
         resetButton.connect("clicked", reset_total_counter)
 
         alarmButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        alarmButton.set_title("Alarm")
+        alarmButton.set_title(_("Alarm"))
         if self.config.get_alarm_enable():
-            alarmButton.set_value("Enabled")
+            alarmButton.set_value(_("Enabled"))
         else:
-            alarmButton.set_value("Disabled")
+            alarmButton.set_value(_("Disabled"))
         alarmButton.set_alignment(0, 0.8, 1, 1)
         alarmButton.connect("clicked", alarmButton_pressed)
 
         selector = hildon.TouchSelector(text=True)
         selector.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
-        selector.append_text("Walk")
-        selector.append_text("Run")
+        selector.append_text(_("Walk"))
+        selector.append_text(_("Run"))
         selector.connect("changed", selector_changed)
 
         modePicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         modePicker.set_alignment(0.0, 0.5, 1.0, 1.0)
-        modePicker.set_title("Mode")
+        modePicker.set_title(_("Mode"))
         modePicker.set_selector(selector)
         modePicker.set_active(self.config.get_mode())
 
         weightButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        weightButton.set_title("Weight")
+        weightButton.set_title(_("Weight"))
         weightButton.set_alignment(0, 0.8, 1, 1)
         update_weight_button()
         weightButton.connect("clicked", weight_dialog)
 
         selectorUnit = hildon.TouchSelector(text=True)
         selectorUnit.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
-        selectorUnit.append_text("Metric (km)")
-        selectorUnit.append_text("English (mi)")
+        selectorUnit.append_text(_("Metric (km)"))
+        selectorUnit.append_text(_("English (mi)"))
         selectorUnit.connect("changed", selectorUnit_changed)
 
         unitPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         unitPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
-        unitPicker.set_title("Unit")
+        unitPicker.set_title(_("Unit"))
         unitPicker.set_selector(selectorUnit)
         unitPicker.set_active(self.config.get_unit())
 
         selectorUI = hildon.TouchSelector(text=True)
         selectorUI = hildon.TouchSelector(text=True)
         selectorUI.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_SINGLE)
-        selectorUI.append_text("Show current + total + graph")
-        selectorUI.append_text("Show current + total")
-        selectorUI.append_text("Show only current")
-        selectorUI.append_text("Show only total")
+        selectorUI.append_text(_("Show current + total + graph"))
+        selectorUI.append_text(_("Show current + total"))
+        selectorUI.append_text(_("Show only current"))
+        selectorUI.append_text(_("Show only total"))
         selectorUI.connect("changed", selectorUI_changed)
 
         UIPicker = hildon.PickerButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
         UIPicker.set_alignment(0.0, 0.5, 1.0, 1.0)
-        UIPicker.set_title("Widget aspect")
+        UIPicker.set_title(_("Widget aspect"))
         UIPicker.set_selector(selectorUI)
         UIPicker.set_active(self.config.get_aspect())
 
         sensitivityButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        sensitivityButton.set_title("Sensitivity")
+        sensitivityButton.set_title(_("Sensitivity"))
         sensitivityButton.set_alignment(0, 0.8, 1, 1)
         sensitivityButton.set_value(str(self.config.get_sensitivity()) + " %")
         sensitivityButton.connect("clicked", sensitivity_dialog)
 
         donateButton = hildon.Button(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT, hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        donateButton.set_title("Donate")
-        donateButton.set_value("Please support the development of this opensource widget!")
+        donateButton.set_title(_("Donate"))
+        donateButton.set_value(_("Please support the development of this opensource widget!"))
         donateButton.set_alignment(0, 0.8, 1, 1)
         donateButton.connect("clicked", donateButton_clicked, dialog)
 
         logButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
-        logButton.set_label("Log data")
+        logButton.set_label(_("Log data"))
         logButton.set_active(self.config.get_logging())
         logButton.connect("toggled", logButton_changed)
 
         idleButton = hildon.CheckButton(gtk.HILDON_SIZE_AUTO_WIDTH | gtk.HILDON_SIZE_FINGER_HEIGHT)
-        idleButton.set_label("Pause time when not walking")
+        idleButton.set_label(_("Pause time when not walking"))
         idleButton.set_active(self.config.get_noidletime())
         idleButton.connect("toggled", idleButton_changed)
 
@@ -1912,7 +1964,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
         else:
             self.controller.start_pedometer()
             self.button.set_icon(ICONSPATH + "stop.png")
-            hildon.hildon_banner_show_information(self, "None", "Keep the N900 in a pocket close to your hip for best results")
+            hildon.hildon_banner_show_information(self, "None", _("Keep the N900 in a pocket close to your hip for best results"))
 
     def do_expose_event(self, event):
         cr = self.window.cairo_create()

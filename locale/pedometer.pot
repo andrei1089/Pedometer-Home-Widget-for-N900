@@ -1,0 +1,286 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2010-03-22 14:46+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: pedometer.py:978 pedometer.py:1399 pedometer.py:1584
+msgid "Steps"
+msgstr ""
+
+#: pedometer.py:978
+msgid "Average Speed"
+msgstr ""
+
+#: pedometer.py:978 pedometer.py:1401 pedometer.py:1585
+msgid "Distance"
+msgstr ""
+
+#: pedometer.py:978 pedometer.py:1400 pedometer.py:1586
+msgid "Calories"
+msgstr ""
+
+#: pedometer.py:979
+msgid "Day"
+msgstr ""
+
+#: pedometer.py:979 pedometer.py:1018 pedometer.py:1036
+msgid "Week"
+msgstr ""
+
+#: pedometer.py:1097
+msgid "Monday"
+msgstr ""
+
+#: pedometer.py:1097
+msgid "Tuesday"
+msgstr ""
+
+#: pedometer.py:1097
+msgid "Wednesday"
+msgstr ""
+
+#: pedometer.py:1097
+msgid "Thursday"
+msgstr ""
+
+#: pedometer.py:1097
+msgid "Friday"
+msgstr ""
+
+#: pedometer.py:1097
+msgid "Saturday"
+msgstr ""
+
+#: pedometer.py:1097
+msgid "Sunday"
+msgstr ""
+
+#: pedometer.py:1100
+msgid "All time steps"
+msgstr ""
+
+#: pedometer.py:1359
+msgid "All-time"
+msgstr ""
+
+#: pedometer.py:1359
+msgid "Today"
+msgstr ""
+
+#: pedometer.py:1359
+msgid "This week"
+msgstr ""
+
+#: pedometer.py:1398 pedometer.py:1583
+msgid "Time"
+msgstr ""
+
+#: pedometer.py:1402
+msgid "Avg Speed"
+msgstr ""
+
+#: pedometer.py:1405
+msgid "Current"
+msgstr ""
+
+#: pedometer.py:1556
+msgid "Alarm settings"
+msgstr ""
+
+#: pedometer.py:1557 pedometer.py:1660 pedometer.py:1695 pedometer.py:1737
+#: pedometer.py:1833
+msgid "OK"
+msgstr ""
+
+#: pedometer.py:1560
+msgid "Enable alarm"
+msgstr ""
+
+#: pedometer.py:1566
+msgid "Test sound"
+msgstr ""
+
+#: pedometer.py:1571
+msgid "Alarm sound"
+msgstr ""
+
+#: pedometer.py:1575
+msgid "Notify every"
+msgstr ""
+
+#: pedometer.py:1576
+msgid "mins"
+msgstr ""
+
+#: pedometer.py:1576
+msgid "steps"
+msgstr ""
+
+#: pedometer.py:1576
+msgid "m/ft"
+msgstr ""
+
+#: pedometer.py:1576
+msgid "calories"
+msgstr ""
+
+#: pedometer.py:1591
+msgid "Alarm type"
+msgstr ""
+
+#: pedometer.py:1615
+msgid "Invalid interval"
+msgstr ""
+
+#: pedometer.py:1621
+msgid "Are you sure you want to delete all your pedometer history?"
+msgstr ""
+
+#: pedometer.py:1625
+msgid "All history was deleted"
+msgstr ""
+
+#: pedometer.py:1659 pedometer.py:1662 pedometer.py:1870
+msgid "Weight"
+msgstr ""
+
+#: pedometer.py:1687
+msgid "Invalid weight"
+msgstr ""
+
+#: pedometer.py:1694 pedometer.py:1903
+msgid "Sensitivity"
+msgstr ""
+
+#: pedometer.py:1721
+msgid "Custom value"
+msgstr ""
+
+#: pedometer.py:1725
+msgid "Using predefined value for height"
+msgstr ""
+
+#: pedometer.py:1736
+msgid "Custom step length"
+msgstr ""
+
+#: pedometer.py:1739
+msgid "Length"
+msgstr ""
+
+#: pedometer.py:1770
+msgid "Invalid length"
+msgstr ""
+
+#: pedometer.py:1778 pedometer.py:1837
+msgid "Step length"
+msgstr ""
+
+#: pedometer.py:1781
+msgid "Enter custom value"
+msgstr ""
+
+#: pedometer.py:1803
+msgid "Use predefined values for height"
+msgstr ""
+
+#: pedometer.py:1832
+msgid "Settings"
+msgstr ""
+
+#: pedometer.py:1843
+msgid "Reset"
+msgstr ""
+
+#: pedometer.py:1844
+msgid "All the stored values will be erased"
+msgstr ""
+
+#: pedometer.py:1849
+msgid "Alarm"
+msgstr ""
+
+#: pedometer.py:1851
+msgid "Enabled"
+msgstr ""
+
+#: pedometer.py:1853
+msgid "Disabled"
+msgstr ""
+
+#: pedometer.py:1859
+msgid "Walk"
+msgstr ""
+
+#: pedometer.py:1860
+msgid "Run"
+msgstr ""
+
+#: pedometer.py:1865
+msgid "Mode"
+msgstr ""
+
+#: pedometer.py:1877
+msgid "Metric (km)"
+msgstr ""
+
+#: pedometer.py:1878
+msgid "English (mi)"
+msgstr ""
+
+#: pedometer.py:1883
+msgid "Unit"
+msgstr ""
+
+#: pedometer.py:1890
+msgid "Show current + total + graph"
+msgstr ""
+
+#: pedometer.py:1891
+msgid "Show current + total"
+msgstr ""
+
+#: pedometer.py:1892
+msgid "Show only current"
+msgstr ""
+
+#: pedometer.py:1893
+msgid "Show only total"
+msgstr ""
+
+#: pedometer.py:1898
+msgid "Widget aspect"
+msgstr ""
+
+#: pedometer.py:1909
+msgid "Donate"
+msgstr ""
+
+#: pedometer.py:1910
+msgid "Please support the development of this opensource widget!"
+msgstr ""
+
+#: pedometer.py:1915
+msgid "Log data"
+msgstr ""
+
+#: pedometer.py:1920
+msgid "Pause time when not walking"
+msgstr ""
+
+#: pedometer.py:1965
+msgid "Keep the N900 in a pocket close to your hip for best results"
+msgstr ""
