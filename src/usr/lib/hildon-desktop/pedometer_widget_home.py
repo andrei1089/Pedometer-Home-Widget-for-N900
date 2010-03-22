@@ -1404,11 +1404,12 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         self.mainvbox.show_all()
         self.add(self.mainvbox)
-        self.update_aspect()
 
         self.connect("unrealize", self.close_requested)
         self.set_settings(True)
         self.connect("show-settings", self.show_settings)
+
+        self.config.add_observer(self.update_aspect)
 
     def eventBoxGraph_clicked(self, widget, data=None):
         widget.set_state(gtk.STATE_ACTIVE)
@@ -1591,7 +1592,7 @@ class PedometerHomePlugin(hildondesktop.HomePluginItem):
 
         def selectorUI_changed(selector, data):
             aspect = selectorUI.get_active(0)
-            widget.update_aspect()
+            self.config.set_aspect(aspect)
 
         def logButton_changed(checkButton):
             logging = checkButton.get_active()

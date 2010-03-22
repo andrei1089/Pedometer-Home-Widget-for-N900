@@ -1,3 +1,10 @@
+pedometerhomewidget (0.3-4) stable; urgency=low
+
+  * Fix widget aspect update bug
+  *
+
+ -- Andrei Mirestean <andrei.mirestean@gmail.com>  Mon, 22 Mar 2010 23:10:28 +0200
+
 pedometerhomewidget (0.3-3) stable; urgency=low
 
   * Fix bug #5407: Count steps correctly if the counter is running
